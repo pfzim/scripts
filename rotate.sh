@@ -1,26 +1,26 @@
 #!/bin/sh
-# script for remove old backup files v0.09.1   pfzim (c) 2010 (44f5709e242b975305161941b30d1573)
+# script for remove old backup files v0.09.2   pfzim (c) 2010 (44f5709e242b975305161941b30d1573)
 # save last ${storage_time} days old backups, all 1 and 15 day of month
 # backups other will be deleted
 
 
 storage_path='.'
 storage_time=90
-expired_cmd='echo rm -f'
+expired_cmd='echo rm -rf'
 
 awkcmd='awk'
 
 curdate=`date '+%Y-%m-%d-%H-%M-%S'`
 #curdate=`mysql -h 127.0.0.1 -u LOGIN -pPASSWORD -s --skip-column-names -e "SELECT DATE_FORMAT(NOW(), '%Y-%m-%d-%H-%i-%S');"`
 
-year=`echo $curdate | ${awkcmd} -F- '{ print $1; }'`
-month=`echo $curdate | ${awkcmd} -F- '{ print $2; }'`
-day=`echo $curdate | ${awkcmd} -F- '{ print $3; }'`
-hour=`echo $curdate | ${awkcmd} -F- '{ print $4; }'`
-minute=`echo $curdate | ${awkcmd} -F- '{ print $5; }'`
-second=`echo $curdate | ${awkcmd} -F- '{ print $6; }'`
+year=`echo $curdate | ${awkcmd} -F- '{ print $1+0; }'`
+month=`echo $curdate | ${awkcmd} -F- '{ print $2+0; }'`
+day=`echo $curdate | ${awkcmd} -F- '{ print $3+0; }'`
+hour=`echo $curdate | ${awkcmd} -F- '{ print $4+0; }'`
+minute=`echo $curdate | ${awkcmd} -F- '{ print $5+0; }'`
+second=`echo $curdate | ${awkcmd} -F- '{ print $6+0; }'`
 
-echo 'Script for remove old backup files v0.09   pfzim (c) 2010'
+echo 'Script for remove old backup files v0.09.2   pfzim (c) 2010'
 echo Today is $day.$month.$year
 
 #[ "backup" "<" "backup-2010-04-14-test.tar.gz" ] || ( echo TEST1 ERROR; exit )
@@ -37,9 +37,9 @@ for filename in ${storage_path}/backup-* ; do
 #	    continue
 #	fi
 
-	y=`echo $filename | ${awkcmd} -F- '{ print $2; }'`
-	m=`echo $filename | ${awkcmd} -F- '{ print $3; }'`
-	d=`echo $filename | ${awkcmd} -F- '{ print $4; }'`
+	y=`echo $filename | ${awkcmd} -F- '{ print $2+0; }'`
+	m=`echo $filename | ${awkcmd} -F- '{ print $3+0; }'`
+	d=`echo $filename | ${awkcmd} -F- '{ print $4+0; }'`
 
 	if [ \( "$d" -lt 1 \) -o \( "$d" -gt 31 \) -o \( "$y" -lt 1 \) ] ; then
 	    echo " invalid date in file name"
@@ -99,7 +99,7 @@ for filename in ${storage_path}/backup-* ; do
 
 	if [ $outdated -gt 0 ]; then
 		echo " expired $d.$m.$y"
-		${expired_cmd} $filename
+		${expired_cmd} "${storage_path}/${filename}"
 	else
 		echo " until $d.$m.$y"
 	fi
