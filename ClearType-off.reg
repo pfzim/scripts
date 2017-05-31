@@ -1,0 +1,35 @@
+REGEDIT4
+
+[HKEY_CURRENT_USER\Control Panel\Desktop]
+"FontSmoothingType"=dword:00000001
+"FontSmoothing"="1"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts]
+"Calibri (TrueType)"=-
+"Calibri Italic (TrueType)"=-
+"Calibri Bold (TrueType)"=-
+"Calibri Bold Italic (TrueType)"=-
+"Segoe MDL2 Assets (TrueType)"=-
+"Segoe Print (TrueType)"=-
+"Segoe Print Bold (TrueType)"=-
+"Segoe Script (TrueType)"=-
+"Segoe Script Bold (TrueType)"=-
+"Segoe UI (TrueType)"=-
+"Segoe UI Black (TrueType)"=-
+"Segoe UI Black Italic (TrueType)"=-
+"Segoe UI Bold (TrueType)"=-
+"Segoe UI Bold Italic (TrueType)"=-
+"Segoe UI Emoji (TrueType)"=-
+"Segoe UI Historic (TrueType)"=-
+"Segoe UI Italic (TrueType)"=-
+"Segoe UI Light (TrueType)"=-
+"Segoe UI Light Italic (TrueType)"=-
+"Segoe UI Semibold (TrueType)"=-
+"Segoe UI Semibold Italic (TrueType)"=-
+"Segoe UI Semilight (TrueType)"=-
+"Segoe UI Semilight Italic (TrueType)"=-
+"Segoe UI Symbol (TrueType)"=-
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontSubstitutes]
+"Segoe UI"="Tahoma"
+"Calibri"="Arial"
