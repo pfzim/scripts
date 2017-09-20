@@ -1,0 +1,4 @@
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\W32Time\Config]
+"UtilizeSslTimeData"=dword:00000000
