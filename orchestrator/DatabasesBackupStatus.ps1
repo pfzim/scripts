@@ -65,18 +65,24 @@ $body = @'
 <body>
 <h1>Databases backup status</h1>
 <table>
-<tr><th>Server Name</th><th>Database</th><th>Model Type</th><th>Last Full</th><th>Last Differental</th><th>Last Log</th></tr>
+<tr><th>Server Name</th><th>Database</th><th>Model Type</th><th>Last Full</th><th>Last Log</th></tr>
 '@
 
 $servers = Get-Content -Path "C:\Orchestrator\settings\mssql-servers-list.txt"
+$exclude = Get-Content -Path "C:\Orchestrator\settings\db-exclude-list.txt"
 foreach($server in $servers)
 {
     $result = Invoke-SQL -dataSource $server -sqlCommand $query
 
     $date7 = (Get-Date).AddDays(-7)
-    $date7 = (Get-Date).AddDays(-1)
+    $date1 = (Get-Date).AddDays(-1)
     foreach($row in $result)
     {
+		if($exclude -match $row.name)
+		{
+			continue
+		}
+
         if(($row.LastFullBackup).Equals([DBNull]::Value))
 		{
            $s_full = '<td class="red">Never</td>'
@@ -111,7 +117,18 @@ foreach($server in $servers)
            $s_diff = '<td class="green">'+$row.LastDifferentialBackup.ToString("dd.MM.yyyy HH:mm")+'</td>'
         }
         
-        if(($row.LastLogBackup).Equals([DBNull]::Value))
+		if($row.recovery_model_desc -eq 'SIMPLE')
+		{
+			if(($row.LastLogBackup).Equals([DBNull]::Value))
+			{
+			   $s_log = '<td>Never</td>'
+			}
+			else
+			{
+			   $s_log = '<td>'+$row.LastLogBackup.ToString("dd.MM.yyyy HH:mm")+'</td>'
+			}
+		}
+		elseif(($row.LastLogBackup).Equals([DBNull]::Value))
 		{
            $s_log = '<td class="red">Never</td>'
 		}
@@ -128,7 +145,7 @@ foreach($server in $servers)
            $s_log = '<td class="green">'+$row.LastLogBackup.ToString("dd.MM.yyyy HH:mm")+'</td>'
         }
 
-        $body += '<tr><td>'+ $server + '</td><td>'+ $row.name + '</td><td>'+ $row.recovery_model_desc + '</td>' + $s_full + $s_diff + $s_log + '</tr>'
+        $body += '<tr><td>'+ $server + '</td><td>'+ $row.name + '</td><td>'+ $row.recovery_model_desc + '</td>' + $s_full + $s_log + '</tr>'
     }
 }
 
