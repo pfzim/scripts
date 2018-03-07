@@ -78,7 +78,7 @@ foreach($server in $servers)
     $date1 = (Get-Date).AddDays(-1)
     foreach($row in $result)
     {
-		if($exclude -match $row.name)
+		if($exclude -eq $row.name)
 		{
 			continue
 		}
