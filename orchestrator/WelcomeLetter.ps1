@@ -6,4 +6,4 @@ $smtp_server = "smtp.contoso.com"
 
 $body = Get-Content -Path C:\Orchestrator\template-mail\index.html -Encoding UTF8 | Out-String
 
-Send-MailMessage -from $smtp_from -to -cc $smtp_to, $smtp_cc -Encoding UTF8 -subject "Welcome letter!" -bodyashtml -body $body -Attachments "C:\Orchestrator\template-mail\ph.png", "C:\Orchestrator\template-mail\top.png", "C:\Orchestrator\template-mail\Attachment-1.pdf" -smtpServer $smtp_server -Credential $smtp_creds
+Send-MailMessage -from $smtp_from -to $smtp_to -cc $smtp_cc -Encoding UTF8 -subject "Welcome letter!" -bodyashtml -body $body -Attachments "C:\Orchestrator\template-mail\ph.png", "C:\Orchestrator\template-mail\top.png", "C:\Orchestrator\template-mail\Attachment-1.pdf" -smtpServer $smtp_server -Credential $smtp_creds
