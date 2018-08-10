@@ -12,6 +12,8 @@ $smtp_creds = New-Object System.Management.Automation.PSCredential ("", (Convert
 
 $smtp_to = @("techsupport@contoso.com", "UserAccess@bristol.ru")
 
+$ErrorActionPreference = "Stop"
+
 $global:result = 1
 $global:error_msg = ""
 
@@ -85,7 +87,7 @@ function main()
 		return
 	}
 
-	$password_plain = "Qwe-1234"
+	$password_plain = (([char[]]"abcdefghiklmnoprstuvwxyzABCEFGHJKLMNPQRSTUVWXYZ23456789" | Get-Random -Count 8) -join '')
 	$password = (ConvertTo-SecureString $password_plain -AsPlainText -Force)
 
 	# Создание УЗ пользователя
@@ -102,14 +104,24 @@ function main()
 
 	# Очистка флага разрешающего установку пустого пароля
 
-	try
+	$fail = 5
+	while($fail -gt 0)
 	{
-		Set-ADAccountControl -Identity $global:login -PasswordNotRequired $false
-	}
-	catch
-	{
-		$global:result = 2
-		$global:error_msg += ("Ошибка установки флага запрета пустого пароля (" + $_.Exception.Message + ");`r`n")
+		try
+		{
+			Set-ADAccountControl -Identity $global:login -PasswordNotRequired $false
+			$fail = 0
+		}
+		catch
+		{
+			Start-Sleep -Seconds 20
+			$fail--
+			if($fail -eq 0)
+			{
+				$global:result = 2
+				$global:error_msg += ("Ошибка установки флага запрета пустого пароля (" + $_.Exception.Message + ");`r`n")
+			}
+		}
 	}
 
 	# Включение почтового ящика
