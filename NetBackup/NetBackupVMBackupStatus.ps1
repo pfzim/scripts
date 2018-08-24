@@ -2,8 +2,8 @@ $smtp_from = "orchestrator@contoso.com"
 $smtp_to = "admin@contoso.com"
 $smtp_server = "smtp.contoso.com"
 
-$smtp_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
-$vmm_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
+$smtp_creds = New-Object System.Management.Automation.PSCredential ("domain\smtp_login", (ConvertTo-SecureString "Passw0rd" -AsPlainText -Force))
+$vmm_creds = New-Object System.Management.Automation.PSCredential ("domain\vmm_admin", (ConvertTo-SecureString "Passw0rd" -AsPlainText -Force))
 
 $ErrorActionPreference = "Stop"
 
