@@ -1,8 +1,10 @@
 $smtp_from = "orchestrator@contoso.com"
-$smtp_to = "dvz@contoso.com"
+$smtp_to = "admin@contoso.com"
 $smtp_server = "smtp.contoso.com"
 
 $smtp_creds = New-Object System.Management.Automation.PSCredential ("domain\smtp_login", (ConvertTo-SecureString "Passw0rd" -AsPlainText -Force))
+
+# parse policies
 
 $data = & 'C:\Program Files\Veritas\NetBackup\bin\admincmd\bppllist.exe' -allpolicies
 
@@ -61,9 +63,11 @@ for($i = 0; $i -lt $data.Count; $i++)
 
 #$policies | ConvertTo-Json -Depth 99
 
-$today = Get-Date
-$month = $today.Month
-$year = $today.Year
+# create launches calendar
+
+$report_date = (Get-Date) #.AddMonths(-1)
+$month = $report_date.Month
+$year = $report_date.Year
 $dom = [datetime]::DaysInMonth($year,$month)
 
 $calendar = @{}
@@ -112,8 +116,10 @@ foreach($p_key in $policies.Keys)
                         $schedule = @{}
                         $schedule['name'] = $s_key
                         $schedule['class'] = 'error'
-                        $schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow])
-                        $schedule['end'] = ($schedule['start']).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow*2])
+                        #$schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$nbdow])
+                        #$schedule['end'] = ($schedule['start']).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$nbdow*2])
+                        $schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0)
+                        $schedule['end'] = ($schedule['start']).AddSeconds(86399)
 
                         #$day['schedules'] += $schedule
                         $schedules += $schedule
@@ -122,17 +128,19 @@ foreach($p_key in $policies.Keys)
             }
 
             #$calendar[$p_key] += $day
-            $calendar[$p_key][$c_key][[string]$i] += $schedules
+            $calendar[$p_key][$c_key][[string] $i] += $schedules
         }
     }
 }
 
 #$calendar | ConvertTo-Json -Depth 99
-#$policies | ConvertTo-Json
+#$policies | ConvertTo-Json -Depth 99
+
+# check finished launches
 
 #$data = & 'C:\Program Files\Veritas\NetBackup\bin\admincmd\bpdbjobs.exe' -ignore_parent_jobs -json
 
-$date = (Get-Date).AddMonths(-1).ToString("yyyy-MM")
+$date = ($report_date).ToString("yyyy-MM")
 $file = ("c:\scripts\logs\result-jobs-" + $date + ".json")
 
 try
@@ -167,6 +175,10 @@ foreach($p_key in $calendar.Keys)
                                     $day['class'] = 'pass'
                                     #(""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
                                 }
+                                elseif($j.ScheduleName -match 'Week')
+                                {
+                                    (""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
+                                }
                             }
                         }
                     }
@@ -178,7 +190,7 @@ foreach($p_key in $calendar.Keys)
 
 #$calendar | ConvertTo-Json
 
-# output
+# print report
 
 $title = "NetBackup month report ({0})" -f $date
 
@@ -249,8 +261,8 @@ $body += @'
                 $body += "</tr>`r`n<tr>"
             }
             #$body += ("<td>{1}</td>" -f $i, ($calendar[$p_key][($i-1)]['schedules'] -join ', '))
-            $body += "<td>"
-            foreach($schedule in $calendar[$p_key][$c_key][[string]($i-1)]) #['schedules']
+            $body += ("<td>" + $i)
+            foreach($schedule in $calendar[$p_key][$c_key][[string] $i]) #['schedules']
             {
                 $body += ("<div class=`"{0}`">{1}</div>" -f $schedule.class, $schedule.name)
             }
