@@ -40,10 +40,10 @@ for($i = 0; $i -lt $data.Count; $i++)
                 $policies[$class]['schedules'][$schedule] = @{}
             }
         }
-        elseif($row -match '^CLIENT (?:[^\s]+) ([^\s]+) ([^\s]+)\s')
+        elseif($row -match '^CLIENT ([^\s]+) ([^\s]+) ([^\s]+)\s')
         {
             ("    " + $matches[1] + "\" + $matches[2])
-            $policies[$class]['clients'] += ($matches[1] + "\" + $matches[2])
+            $policies[$class]['clients'] += @{ name = $matches[1]; instance = $matches[2]; db = $matches[3].Replace("%20", " ") }
         }
         elseif(!$skip_schedule)
         {
@@ -65,7 +65,7 @@ for($i = 0; $i -lt $data.Count; $i++)
 
 # create launches calendar
 
-$report_date = (Get-Date) #.AddMonths(-1)
+$report_date = (Get-Date).AddMonths(-1)
 $month = $report_date.Month
 $year = $report_date.Year
 $dom = [datetime]::DaysInMonth($year,$month)
@@ -81,19 +81,16 @@ foreach($p_key in $policies.Keys)
         continue
     }
 
-    $calendar[$p_key] = @{}
+    $calendar[$p_key] = @()
 
     #("POLICY : " + $p_key)
 
     foreach($c_key in $policy['clients'])
     {
-        $calendar[$p_key][$c_key] = @{}
+        $client = @{ name = $c_key['name']; instance = $c_key['instance']; db = $c_key['db']; days = @{} }
 
         for($i = 1; $i -le $dom; $i++)
         {
-            #$day
-            #$day = @{}
-            #$day['date'] = Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0
             $date = Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0
 
             #("  DAY : " + $day['date'])
@@ -116,9 +113,9 @@ foreach($p_key in $policies.Keys)
                         $schedule = @{}
                         $schedule['name'] = $s_key
                         $schedule['class'] = 'error'
-                        #$schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$nbdow])
-                        #$schedule['end'] = ($schedule['start']).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$nbdow*2])
-                        $schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0)
+                        #$schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow])
+                        #$schedule['end'] = ($schedule['start']).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow*2])
+                        $schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds(0)
                         $schedule['end'] = ($schedule['start']).AddSeconds(86399)
 
                         #$day['schedules'] += $schedule
@@ -128,8 +125,10 @@ foreach($p_key in $policies.Keys)
             }
 
             #$calendar[$p_key] += $day
-            $calendar[$p_key][$c_key][[string] $i] += $schedules
+            $client['days'][[string] $i] += $schedules
         }
+
+        $calendar[$p_key] += $client
     }
 }
 
@@ -159,13 +158,20 @@ foreach($p_key in $calendar.Keys)
     {
         if($j.PolicyName -eq $p_key)
         {
-            foreach($c_key in $calendar[$p_key].Keys)
+            foreach($c_key in $calendar[$p_key])
             {
-                if($c_key -eq $j.InstanceDatabaseName)
+                # fix names
+                $c_name = ($c_key['name'].split('.'))[0]
+                if($c_name -match "^brc-vsql")
                 {
-                    foreach($d_key in $calendar[$p_key][$c_key].Keys)
+                    $c_name += "|brc-sql-01|brc-sql-02"
+                }
+
+                if($j.Status -eq 0 -and $j.ClientName -match $c_name -and ($c_key['instance'] + "\" + $c_key['db']) -eq $j.InstanceDatabaseName)
+                {
+                    foreach($d_key in $c_key['days'].Keys)
                     {
-                        foreach($day in $calendar[$p_key][$c_key][$d_key])
+                        foreach($day in $c_key['days'][$d_key])
                         {
                             if($day['name'] -eq $j.ScheduleName)
                             {
@@ -174,10 +180,6 @@ foreach($p_key in $calendar.Keys)
                                 {
                                     $day['class'] = 'pass'
                                     #(""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
-                                }
-                                elseif($j.ScheduleName -match 'Week')
-                                {
-                                    (""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
                                 }
                             }
                         }
@@ -224,18 +226,18 @@ foreach($p_key in $calendar.Keys)
     $day = Get-Date -Year $year -Month $month -Day 1
     $dow = [int] $day.DayOfWeek
 
-$body += @'
+    $body += @'
 <h2>{0}</h2>
 '@ -f $p_key
 
-    foreach($c_key in $calendar[$p_key].Keys)
+    foreach($c_key in $calendar[$p_key])
     {
-$body += @'
-<h3>{0}</h3>
+        $body += @'
+<h3>{0}: {1}\{2}</h3>
 <table>
 <tr><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th><th>Su</th></tr>
 <tr>
-'@ -f $c_key
+'@ -f $c_key['name'], $c_key['instance'], $c_key['db']
 
         if($dow -ne 1)
         {
@@ -262,7 +264,7 @@ $body += @'
             }
             #$body += ("<td>{1}</td>" -f $i, ($calendar[$p_key][($i-1)]['schedules'] -join ', '))
             $body += ("<td>" + $i)
-            foreach($schedule in $calendar[$p_key][$c_key][[string] $i]) #['schedules']
+            foreach($schedule in $c_key['days'][[string] $i]) #['schedules']
             {
                 $body += ("<div class=`"{0}`">{1}</div>" -f $schedule.class, $schedule.name)
             }

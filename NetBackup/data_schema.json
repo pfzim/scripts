@@ -1,0 +1,26 @@
+{
+	"policy_name":
+		[
+			{
+				name: "client_host",
+				instance: "",
+				db: "",
+				days:
+					{
+						"1":
+							[
+								{
+									name: "schedule_name"
+									start: date_time,
+									end: date_time,
+									class: "css_class"
+								},
+								...
+							],
+						...
+					}
+						
+			},
+			...
+		]
+}
