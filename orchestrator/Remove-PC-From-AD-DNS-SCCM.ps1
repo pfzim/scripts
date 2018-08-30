@@ -38,7 +38,7 @@ function main()
 
 	try
 	{
-		$dns = Get-DnsServerResourceRecord -ComputerName brc-dc-01 -ZoneName "contoso.com" -Name $global:compname -ErrorAction SilentlyContinue
+		$dns = Get-DnsServerResourceRecord -ComputerName srv-dc-01 -ZoneName "contoso.com" -Name $global:compname -ErrorAction SilentlyContinue
 	}
 	catch
 	{
@@ -49,7 +49,7 @@ function main()
 	{
 		if($dns)
 		{
-			$dns | Remove-DnsServerResourceRecord -ComputerName brc-dc-01 -ZoneName "contoso.com" -Force
+			$dns | Remove-DnsServerResourceRecord -ComputerName srv-dc-01 -ZoneName "contoso.com" -Force
 		}
 		else
 		{
@@ -62,7 +62,7 @@ function main()
 		$global:error_msg += "Ошибка удаления DNS записи;`r`n"
 	}
 
-	$sccmServer='brc-sccm-01.contoso.com'
+	$sccmServer='srv-sccm-01.contoso.com'
 	$sccmSite='M01'
 
 	$comp = 0

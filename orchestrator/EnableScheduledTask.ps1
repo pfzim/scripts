@@ -1,6 +1,6 @@
 $task_name = "ALB_UT_Clone"
 
-$sess = New-PSSession -ComputerName "brc-ssmc-01"
+$sess = New-PSSession -ComputerName "srv-ssmc-01"
 $exit_code = Invoke-Command -Session $sess -ArgumentList $task_name -ScriptBlock {
     $task = Enable-ScheduledTask -TaskName $args[0]
     $task = Get-ScheduledTask -TaskName $args[0]

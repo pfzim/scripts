@@ -21,7 +21,7 @@ $body = @'
 </tr>
 '@
 
-$sess = New-PSSession -ComputerName "brc-ssmc-01"
+$sess = New-PSSession -ComputerName "srv-ssmc-01"
 $body += Invoke-Command -Session $sess -ScriptBlock {
 	$body = ""
     $tasks = Get-ScheduledTask -TaskName "ALB_UT_Clone", "ALB_UT to ALB_UT_Test_01", "ALB_UT to ALB_UT_Test_02", "ALB_BP_KORP_Clone", "ALB_ZUP_Clone", "ALB_UPRHOLD"

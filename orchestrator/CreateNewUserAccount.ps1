@@ -10,7 +10,7 @@ $global:company_code = ""
 $creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
 $smtp_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
 
-$smtp_to = @("techsupport@contoso.com", "UserAccess@bristol.ru")
+$smtp_to = @("techsupport@contoso.com", "UserAccess@contoso.com")
 
 $ErrorActionPreference = "Stop"
 
@@ -126,7 +126,7 @@ function main()
 
 	# Включение почтового ящика
 
-	$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://brc-exch-01.contoso.com/powershell/ -Credential $creds -Authentication Kerberos
+	$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://srv-exch-01.contoso.com/powershell/ -Credential $creds -Authentication Kerberos
 	Import-PSSession $session
 
 	$fail = 5
@@ -217,7 +217,7 @@ function main()
 
 	# Включение Lync
 
-	$session = New-PSSession -ConnectionUri https://brc-sfb-01.contoso.com/OcsPowershell -Credential $creds
+	$session = New-PSSession -ConnectionUri https://srv-sfb-01.contoso.com/OcsPowershell -Credential $creds
 	Import-PSSession $session
 
 	$fail = 5
@@ -225,7 +225,7 @@ function main()
 	{
 		try
 		{
-			Enable-CsUser -Identity $global:login -RegistrarPool "brc-sfb-01.contoso.com" -SipAddressType EmailAddres -SipDomain $company.domain
+			Enable-CsUser -Identity $global:login -RegistrarPool "srv-sfb-01.contoso.com" -SipAddressType EmailAddres -SipDomain $company.domain
 			$fail = 0
 		}
 		catch

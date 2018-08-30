@@ -33,7 +33,7 @@ $snapshots = Invoke-Command -Session $session -ScriptBlock {
 	Import-Module -Name Hyper-V
 
 	$snapshots = @()
-	$nodes = Get-ClusterNode -Cluster BRC-HVCL-01
+	$nodes = Get-ClusterNode -Cluster srv-HVCL-01
 	foreach($node in $nodes)
 	{
 		$snapshots += Get-VM -ComputerName $node.Name | Get-VMSnapshot | select VMName, Name, CreationTime

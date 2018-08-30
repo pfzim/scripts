@@ -1,6 +1,6 @@
 $smtp_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
 
-$smtp_from = "orchestrator@bristolcapital.ru"
+$smtp_from = "orchestrator@contoso.com"
 $smtp_to = "admin@contoso.com"
 $smtp_server = "smtp.contoso.com"
 
