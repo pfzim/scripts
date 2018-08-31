@@ -65,10 +65,18 @@ for($i = 0; $i -lt $data.Count; $i++)
 
 # create launches calendar
 
-$report_date = (Get-Date).AddMonths(-1)
-$month = $report_date.Month
-$year = $report_date.Year
-$dom = [datetime]::DaysInMonth($year,$month)
+$report_date = Get-Date
+
+if($report_date.DayOfWeek -eq 0)
+{
+    $twd = 7
+}
+else
+{
+    $twd = $report_date.DayOfWeek
+}
+
+$report_date = $report_date.AddDays(-6 - $twd)
 
 $calendar = @{}
 
@@ -89,9 +97,10 @@ foreach($p_key in $policies.Keys)
     {
         $client = @{ name = $c_key['name']; instance = $c_key['instance']; db = $c_key['db']; days = @{} }
 
-        for($i = 1; $i -le $dom; $i++)
+        for($i = 0; $i -lt 7; $i++)
         {
-            $date = Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0
+			$date = $report_date.AddDays($i)
+            $date = Get-Date -Year $date.Year -Month $date.Month -Day $date.Day -Hour 0 -Minute 0 -Second 0
 
             #("  DAY : " + $day['date'])
             $dow = [int] $date.DayOfWeek
@@ -115,7 +124,7 @@ foreach($p_key in $policies.Keys)
                         $schedule['class'] = 'error'
                         #$schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow])
                         #$schedule['end'] = ($schedule['start']).AddSeconds($policies[$p_key]['schedules'][$s_key].windows[$dow*2])
-                        $schedule['start'] = (Get-Date -Year $year -Month $month -Day $i -Hour 0 -Minute 0 -Second 0).AddSeconds(0)
+                        $schedule['start'] = $date.AddSeconds(0)
                         $schedule['end'] = ($schedule['start']).AddSeconds(86399)
 
                         #$day['schedules'] += $schedule
@@ -125,7 +134,7 @@ foreach($p_key in $policies.Keys)
             }
 
             #$calendar[$p_key] += $day
-            $client['days'][[string] $i] += $schedules
+            $client['days'][[string] $date.Day] += $schedules
         }
 
         $calendar[$p_key] += $client
@@ -139,62 +148,74 @@ foreach($p_key in $policies.Keys)
 
 #$data = & 'C:\Program Files\Veritas\NetBackup\bin\admincmd\bpdbjobs.exe' -ignore_parent_jobs -json
 
-$date = ($report_date).ToString("yyyy-MM")
-$file = ("c:\scripts\logs\result-jobs-" + $date + ".json")
-
-try
+if($report_date.Month -ne $report_date.AddDays(6).Month)
 {
-    $data = Get-Content -Path $file -Raw
-    $json = $data | ConvertFrom-Json
+	$log_dates = @($report_date, $report_date.AddDays(6))
 }
-catch
+else
 {
-    $json = "[]" | ConvertFrom-Json
+	$log_dates = @($report_date)
 }
 
-foreach($p_key in $calendar.Keys)
+foreach($log_date in $log_dates)
 {
-    foreach($j in $json)
-    {
-        if($j.PolicyName -eq $p_key)
-        {
-            foreach($c_key in $calendar[$p_key])
-            {
-                # fix names
-                $c_name = ($c_key['name'].split('.'))[0]
-                if($c_name -match "^srv-vsql")
-                {
-                    $c_name += "|srv-sql-01|srv-sql-02"
-                }
+	$file = ("c:\scripts\logs\result-jobs-" + ($log_date).ToString("yyyy-MM") + ".json")
+	("Loading: " + $file)
 
-                if($j.Status -eq 0 -and $j.ClientName -match $c_name -and ($c_key['instance'] + "\" + $c_key['db']) -eq $j.InstanceDatabaseName)
-                {
-                    foreach($d_key in $c_key['days'].Keys)
-                    {
-                        foreach($day in $c_key['days'][$d_key])
-                        {
-                            if($day['name'] -eq $j.ScheduleName)
-                            {
-                                $jst = ((Get-Date "1970-01-01 00:00:00.000Z") + ([TimeSpan]::FromSeconds($j.StartTime)))
-                                if($jst -ge $day['start'] -and $jst -le $day['end'])
-                                {
-                                    $day['class'] = 'pass'
-                                    #(""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+	try
+	{
+		$data = Get-Content -Path $file -Raw
+		$json = $data | ConvertFrom-Json
+	}
+	catch
+	{
+		$json = "[]" | ConvertFrom-Json
+	}
+
+	foreach($p_key in $calendar.Keys)
+	{
+		foreach($j in $json)
+		{
+			if($j.PolicyName -eq $p_key)
+			{
+				foreach($c_key in $calendar[$p_key])
+				{
+					# fix names
+					$c_name = ($c_key['name'].split('.'))[0]
+					if($c_name -match "^srv-vsql")
+					{
+						$c_name += "|srv-sql-01|srv-sql-02"
+					}
+
+					if($j.Status -eq 0 -and $j.ClientName -match $c_name -and ($c_key['instance'] + "\" + $c_key['db']) -eq $j.InstanceDatabaseName)
+					{
+						foreach($d_key in $c_key['days'].Keys)
+						{
+							foreach($day in $c_key['days'][$d_key])
+							{
+								if($day['name'] -eq $j.ScheduleName)
+								{
+									$jst = ((Get-Date "1970-01-01 00:00:00.000Z") + ([TimeSpan]::FromSeconds($j.StartTime)))
+									if($jst -ge $day['start'] -and $jst -le $day['end'])
+									{
+										$day['class'] = 'pass'
+										#(""+ $j.JobId + "   " + $j.Status + "   " + $day['start'] + " < " + $jst +  " <  " + $day['end'] + "   " + $j.PolicyName + "   " + $j.ScheduleName + "   " + $j.InstanceDatabaseName)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 #$calendar | ConvertTo-Json
 
 # print report
 
-$title = "NetBackup month report ({0})" -f $date
+$title = "NetBackup week report ({0})" -f ($report_date).ToString("yyyy-MM-dd")
 
 $body = @'
 <html>
@@ -239,46 +260,17 @@ foreach($p_key in $calendar.Keys)
 <tr>
 '@ -f $c_key['name'], $c_key['instance'], $c_key['db']
 
-        if($dow -ne 1)
+        for($i = 0; $i -lt 7; $i++)
         {
-            if($dow -eq 0)
-            {
-                $fill = 6
-            }
-            else
-            {
-                $fill = $dow - 1
-            }
-            for($i = 0; $i -lt $fill; $i++)
-            {
-                $body += ("<td></td>")
-            }
-        }
-
-        for($i = 1; $i -le $dom; $i++)
-        {
-            $day = Get-Date -Year $year -Month $month -Day $i
-            if(($day.DayOfWeek -eq 1) -and ($i -ne 1))
-            {
-                $body += "</tr>`r`n<tr>"
-            }
-            #$body += ("<td>{1}</td>" -f $i, ($calendar[$p_key][($i-1)]['schedules'] -join ', '))
-            $body += ("<td>" + $i)
-            foreach($schedule in $c_key['days'][[string] $i]) #['schedules']
+            $day = $report_date.AddDays($i)
+            $body += ("<td>" + $day.Day)
+            foreach($schedule in $c_key['days'][[string] $day.Day]) #['schedules']
             {
                 $body += ("<div class=`"{0}`">{1}</div>" -f $schedule.class, $schedule.name)
             }
             $body += "</td>"
         }
 
-        if($day.DayOfWeek -ne 0)
-        {
-            for($i = $day.DayOfWeek; $i -le 6; $i++)
-            {
-                $body += ("<td></td>")
-            }
-        }
-    
         $body += "</tr></table>`r`n"
    }
 }
