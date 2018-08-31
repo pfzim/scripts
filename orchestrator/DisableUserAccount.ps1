@@ -97,7 +97,7 @@ function DisableUser($user)
 	catch
 	{
 		$global:result = 2
-		$global:error_msg = ("Ошибка отключения УЗ пользователя (" + $_.Exception.Message + ");`r`n")
+		$global:error_msg += ("Ошибка отключения УЗ пользователя (" + $_.Exception.Message + ");`r`n")
 	}
 
 	# Смена пароля пользователя
@@ -108,7 +108,7 @@ function DisableUser($user)
 	}
 	catch
 	{
-		$global:error_msg = ("Ошибка смены пароля (" + $_.Exception.Message + ");`r`n")
+		$global:error_msg += ("Ошибка смены пароля (" + $_.Exception.Message + ");`r`n")
 	}
 
 	# Внесение номера инцидента
@@ -207,7 +207,7 @@ function DisableUser($user)
 		try
 		{
 			$mail_info = Get-CASMailbox $user.SamAccountName
-			$user_info.addressbook = !$mail_info.HiddenFromAddressListsEnabled
+			$user_info.addressbook = (!($mail_info.HiddenFromAddressListsEnabled))
 			$user_info.activesync = $mail_info.ActiveSyncEnabled
 		}
 		catch
@@ -230,16 +230,10 @@ function DisableUser($user)
 
 		# Получить список разрешенных устройств
 
+		$mail_devices = @()
 		try
 		{
 			$mail_devices = Get-MobileDeviceStatistics -Mailbox $user.SamAccountName
-			foreach($device in $mail_devices)
-			{
-				if($device.DeviceAccessState -eq "Allowed")
-				{
-					$user_info.activesyncdevices += $device.DeviceID
-				}
-			}
 		}
 		catch
 		{
@@ -249,14 +243,21 @@ function DisableUser($user)
 
 		# Удаление разрешенных устройств
 
-		try
+		foreach($device in $mail_devices)
 		{
-			Set-CASMailbox -Identity $user.SamAccountName -ActiveSyncAllowedDeviceIDs $null
-		}
-		catch
-		{
-			$global:result = 2
-			$global:error_msg += ("Ошибка удаления разрешенных устройств (" + $_.Exception.Message + ");`r`n")
+			if($device.DeviceAccessState -eq "Allowed")
+			{
+				$user_info.activesyncdevices += $device.DeviceID
+				try
+				{
+					Set-CASMailbox -Identity $user.SamAccountName -ActiveSyncBlockedDeviceIDs @{ Add = $device.DeviceID }
+				}
+				catch
+				{
+					$global:result = 2
+					$global:error_msg += ("Ошибка блокировки устройства " + $divice.DeviceID + " (" + $_.Exception.Message + ");`r`n")
+				}
+			}
 		}
 
 		# Выключение ActiveSync
