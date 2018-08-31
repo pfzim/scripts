@@ -36,7 +36,7 @@ function EnableUser($user)
 	
 	try
 	{
-		$data = Get-Content -Path "\\srv-admsrv-01\Log_SCORCH$\runbook_test3_000099.pson"
+		$data = Get-Content -Path ("\\srv-admsrv-01\Log_SCORCH$\" + $user.samaccountname + "_" + $global:incident + ".pson")
 	}
 	catch
 	{
@@ -205,13 +205,11 @@ function EnableUser($user)
 
 		foreach($rule in $user_info.mailrules)
 		{
-			$user_info.mailrules += [string] $rule.RuleIdentity
-
 			# Включение почтового правила
 
 			try
 			{
-				Enable-InboxRule -Identity $rule.RuleIdentity -Mailbox $user.SamAccountName
+				Enable-InboxRule -Identity $rule -Mailbox $user.SamAccountName
 			}
 			catch
 			{
