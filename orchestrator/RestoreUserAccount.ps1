@@ -102,18 +102,6 @@ function EnableUser($user)
 		$global:error_msg += ("Ошибка внесения номера инцидента и запроса смены пароля при первом входе (" + $_.Exception.Message + ");`r`n")
 	}
 
-	# Переместить в OU
-
-	try
-	{
-		Move-ADObject -Identity $user -TargetPath $user_info.path
-	}
-	catch
-	{
-		$global:result = 2
-		$global:error_msg += ("Ошибка перемещения в " + $user_info.path + " (" + $_.Exception.Message + ");`r`n")
-	}
-
 	# Удаление пользователя из групп
 
 	foreach($group in $user.memberof)
@@ -230,7 +218,8 @@ function EnableUser($user)
 	{
 		try
 		{
-			Enable-CsUser -Identity $global:login -RegistrarPool "srv-sfb-01.contoso.com" -SipAddressType EmailAddress
+			#Enable-CsUser -Identity $global:login -RegistrarPool "srv-sfb-01.contoso.com" -SipAddressType EmailAddress
+			Set-CSUser -Identity $user.DistinguishedName -Enabled:$true -Confirm:$false
 		}
 		catch
 		{
@@ -240,6 +229,18 @@ function EnableUser($user)
 	}
 
 	Remove-PSSession $session
+
+	# Переместить в OU
+
+	try
+	{
+		Move-ADObject -Identity $user -TargetPath $user_info.path
+	}
+	catch
+	{
+		$global:result = 2
+		$global:error_msg += ("Ошибка перемещения в " + $user_info.path + " (" + $_.Exception.Message + ");`r`n")
+	}
 
 	# Отправка информационного письма
 

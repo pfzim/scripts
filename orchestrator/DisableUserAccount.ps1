@@ -123,31 +123,6 @@ function DisableUser($user)
 		$global:error_msg += ("Ошибка внесения номера инцидента (" + $_.Exception.Message + ");`r`n")
 	}
 
-	# Переместить в OU Уволенные сотрудники
-
-	if($user.Company -eq 'ООО "БРЛ"')
-	{
-		$path = "OU=Уволенные сотрудники БРЛ,OU=Disabled Accounts,DC=contoso,DC=com"
-	}
-	elseif($user.Company -eq 'ООО "Альбион-2002"')
-	{
-		$path = "OU=Уволенные сотрудники Альбион-2002,OU=Disabled Accounts,DC=contoso,DC=com"
-	}
-	else
-	{
-		$path = "OU=Disabled Accounts,DC=contoso,DC=com"
-	}
-
-	try
-	{
-		Move-ADObject -Identity $user -TargetPath $path
-	}
-	catch
-	{
-		$global:result = 2
-		$global:error_msg += ("Ошибка перемещения в " + $path + " (" + $_.Exception.Message + ");`r`n")
-	}
-
 	# Сохрание списка групп
 
 	try
@@ -327,7 +302,8 @@ function DisableUser($user)
 		
 		try
 		{
-			Disable-CSUser -Identity $user.SamAccountName
+			#Disable-CSUser -Identity $user.SamAccountName
+			Set-CSUser -Identity $user.DistinguishedName -Enabled:$false -Confirm:$false
 		}
 		catch
 		{
@@ -337,7 +313,7 @@ function DisableUser($user)
 
 		try
 		{
-			Revoke-CsClientCertificate -Identity $user.SamAccountName
+			Revoke-CsClientCertificate -Identity $user.DistinguishedName
 		}
 		catch
 		{
@@ -347,6 +323,31 @@ function DisableUser($user)
 	}
 
 	Remove-PSSession $session
+
+	# Переместить в OU Уволенные сотрудники
+
+	if($user.Company -eq 'ООО "БРЛ"')
+	{
+		$path = "OU=Уволенные сотрудники БРЛ,OU=Disabled Accounts,DC=contoso,DC=com"
+	}
+	elseif($user.Company -eq 'ООО "Альбион-2002"')
+	{
+		$path = "OU=Уволенные сотрудники Альбион-2002,OU=Disabled Accounts,DC=contoso,DC=com"
+	}
+	else
+	{
+		$path = "OU=Disabled Accounts,DC=contoso,DC=com"
+	}
+
+	try
+	{
+		Move-ADObject -Identity $user -TargetPath $path
+	}
+	catch
+	{
+		$global:result = 2
+		$global:error_msg += ("Ошибка перемещения в " + $path + " (" + $_.Exception.Message + ");`r`n")
+	}
 
 	# Сохрание параметров для восстановления
 
