@@ -269,12 +269,12 @@ function DisableUser($user)
 
 				try
 				{
-					Disable-InboxRule -Identity $rule.RuleIdentity -Mailbox $user.SamAccountName
+					Disable-InboxRule -Identity $rule.RuleIdentity -Mailbox $user.SamAccountName -Force
 				}
 				catch
 				{
 					$global:result = 2
-					$global:error_msg += ("Ошибка отключения включенного правила " + $rule.Name + " (" + $_.Exception.Message + ");`r`n")
+					$global:error_msg += ("Ошибка отключения почтового правила " + $rule.Name + " (" + $_.Exception.Message + ");`r`n")
 				}
 			}
 		}
