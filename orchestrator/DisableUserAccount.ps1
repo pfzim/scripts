@@ -261,7 +261,7 @@ function DisableUser($user)
 
 		foreach($rule in $mail_rules)
 		{
-			if($rule.Enabled)
+			if($rule.Enabled -and $rule.SupportedByTask)
 			{
 				$user_info.mailrules += [string] $rule.RuleIdentity
 
