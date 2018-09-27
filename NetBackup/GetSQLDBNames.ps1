@@ -110,7 +110,7 @@ foreach($server in $servers)
         {
             $list[$row.dbname].mdf = $row.name
         }
-        else
+        elseif($row.name -notin $list[$row.dbname].log)
         {
             $list[$row.dbname].log += $row.name
         }
