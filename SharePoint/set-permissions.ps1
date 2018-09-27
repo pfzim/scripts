@@ -12,8 +12,8 @@ $libs = @("Оприходование товаров")
 foreach($portal in $portals)
 {
     $web = Get-SPWeb -Identity $portal
-    $global_read_user = $web.EnsureUser("G_SP_NN2015_RO")
-    $global_write_user = $web.EnsureUser("G_SP_NN2015_RW")
+    $global_read_user = $web.EnsureUser("G_SP_NN_RO")
+    $global_write_user = $web.EnsureUser("G_SP_NN_RW")
 
     foreach($lib in $libs)
     {
@@ -33,7 +33,7 @@ foreach($portal in $portals)
 			$item.BreakRoleInheritance($false)
 			while($item.RoleAssignments.Count -gt 0) 
 			{
-                $item.RoleAssignments.Item(0)
+                #$item.RoleAssignments.Item(0)
 				$item.RoleAssignments.Remove(0)
 			}
 
@@ -41,41 +41,43 @@ foreach($portal in $portals)
 
             if($bu -notmatch "^\d+$")
             {
-                Write-Host -ForegroundColor Red ("BU not defined: " + $bu)
+                Write-Host -ForegroundColor Red ("  BU not defined: " + $bu)
             }
             else
             {
                 try
                 {
+                    $x = Get-ADGroup -Identity ("G_SP_BU_" + $bu + "_RW") -ErrorAction Stop
                     $user = $web.EnsureUser("G_SP_BU_" + $bu + "_RW")
                 }
                 catch
                 {
                     $user = $null
-                    Write-Host -ForegroundColor Red ("AD group not found: G_SP_BU_" + $bu + "_RW")
+                    Write-Host -ForegroundColor Red ("  AD group not found: G_SP_BU_" + $bu + "_RW")
                 }
 
                 if($user)
                 {
-                    Write-Host -ForegroundColor Green ("G_SP_BU_" + $bu + "_RW")
+                    Write-Host -ForegroundColor Green ("  G_SP_BU_" + $bu + "_RW")
 			        $roleAssignment = New-Object microsoft.sharepoint.SPRoleAssignment($user)
-			        $roleAssignment.RoleDefinitionBindings.Add($web.RoleDefinitions["Full Control"])
+			        $roleAssignment.RoleDefinitionBindings.Add($web.RoleDefinitions["Edit"])
 			        $item.RoleAssignments.Add($roleAssignment)
                 }
 
                 try
                 {
+                    $x = Get-ADGroup -Identity ("G_SP_BU_" + $bu + "_RO") -ErrorAction Stop
                     $user = $web.EnsureUser("G_SP_BU_" + $bu + "_RO")
                 }
                 catch
                 {
                     $user = $null
-                    Write-Host -ForegroundColor Red ("AD group not found: G_SP_BU_" + $bu + "_RO")
+                    Write-Host -ForegroundColor Red ("  AD group not found: G_SP_BU_" + $bu + "_RO")
                 }
 
                 if($user)
                 {
-                    Write-Host -ForegroundColor Green ("G_SP_BU_" + $bu + "_RO")
+                    Write-Host -ForegroundColor Green ("  G_SP_BU_" + $bu + "_RO")
 			        $roleAssignment = New-Object microsoft.sharepoint.SPRoleAssignment($user)
 			        $roleAssignment.RoleDefinitionBindings.Add($web.RoleDefinitions["Read"])
 			        $item.RoleAssignments.Add($roleAssignment)
@@ -83,7 +85,7 @@ foreach($portal in $portals)
             }
 
 		    $roleAssignment = New-Object microsoft.sharepoint.SPRoleAssignment($global_write_user)
-		    $roleAssignment.RoleDefinitionBindings.Add($web.RoleDefinitions["Full Control"])
+		    $roleAssignment.RoleDefinitionBindings.Add($web.RoleDefinitions["Edit"])
 		    $item.RoleAssignments.Add($roleAssignment)
 
 		    $roleAssignment = New-Object microsoft.sharepoint.SPRoleAssignment($global_read_user)
@@ -94,7 +96,7 @@ foreach($portal in $portals)
 
 	        $i++
 
-            break
+            #break
         }
     }
 
