@@ -44,19 +44,19 @@ $clients = @{
 						"media" = @(); 
 						"nbimage" = $Null; 
 						"mdf" = "modeldev"; 
-						"log" = "modellog"
+						"log" = @("modellog")
 					}; 
 					"master" = @{
 						"media" = @(); 
 						"nbimage" = $Null; 
 						"mdf" = "master"; 
-						"log" = "mastlog"
+						"log" = @("mastlog")
 					}; 
 					"msdb" = @{
 						"media" = @(); 
 						"nbimage" = $Null; 
 						"mdf" = "MSDBData"; 
-						"log" = "MSDBLog"
+						"log" = @("MSDBLog")
 					}
 				}
 			}
@@ -69,7 +69,7 @@ $clients = @{
 						"media" = @(); 
 						"nbimage" = $Null; 
 						"mdf" = "ALB_RT_CleanCopy_dev"; 
-						"log" = "ALB_RT_CleanCopy_dev_log"
+						"log" = @("ALB_RT_CleanCopy_dev_log", "ALB_RT_CleanCopy_dev_log2")
 					}; 
 				}
 			}

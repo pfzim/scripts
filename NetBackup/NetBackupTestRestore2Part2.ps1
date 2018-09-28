@@ -5,6 +5,12 @@ $smtp_server = "smtp.contoso.com"
 $smtp_creds = New-Object System.Management.Automation.PSCredential ("contoso\orchestrator", (ConvertTo-SecureString "Passw0rd" -AsPlainText -Force))
 
 
+$log_template = @'
+MOVE  "{0}"
+TO  "F:\Workdata\NB_Test_Restore_log_{1}.ldf"
+
+'@
+
 $bch_template = @'
 OPERATION RESTORE
 OBJECTTYPE DATABASE
@@ -12,8 +18,7 @@ RESTORETYPE MOVE
 DATABASE "NB_Test_Restore"
 MOVE  "{0}"
 TO  "F:\Workdata\NB_Test_Restore.mdf"
-MOVE  "{1}"
-TO  "F:\Workdata\NB_Test_Restore_log.ldf"
+{1}
 NBIMAGE "{2}"
 SQLHOST "BRC-NBTEST-01"
 SQLINSTANCE "MSSQLSERVER"
@@ -180,8 +185,16 @@ foreach($p_key in $clients.Keys)
 					Log-Screen "info" ("  MDF: " + $clients[$p_key][$c_key][$s_key].dblist[$d_key].mdf + ", LOG: " + $clients[$p_key][$c_key][$s_key].dblist[$d_key].log + ", Stripes: " + $clients[$p_key][$c_key][$s_key].dblist[$d_key].stripes)
 
 					# create move script
+					
+					$log = ''
+					$i = 0
+					foreach($l_name in $clients[$p_key][$c_key][$s_key].dblist[$d_key].log)
+					{
+						$log += $log_template -f $l_name, $i
+						$i++
+					}
 
-					$bch = $bch_template -f $clients[$p_key][$c_key][$s_key].dblist[$d_key].mdf, $clients[$p_key][$c_key][$s_key].dblist[$d_key].log, $clients[$p_key][$c_key][$s_key].dblist[$d_key].nbimage, $clients[$p_key][$c_key][$s_key].dblist[$d_key].stripes, $c_key
+					$bch = $bch_template -f $clients[$p_key][$c_key][$s_key].dblist[$d_key].mdf, $log, $clients[$p_key][$c_key][$s_key].dblist[$d_key].nbimage, $clients[$p_key][$c_key][$s_key].dblist[$d_key].stripes, $c_key
 					Set-Content -Path "c:\_temp\restore.bch" -Value $bch
 					
 					Log-Only "info" "  Restoring DB..."
