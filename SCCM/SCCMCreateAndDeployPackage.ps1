@@ -57,7 +57,7 @@ foreach($folder in $folders)
 
 				New-CMPackage -Name $pkg_name -Path $folder.FullName
 				New-CMProgram -PackageName $pkg_name -StandardProgramName SPM -CommandLine $config.settings.command -WorkingDirectory "C:\temp" -RunType Hidden -ProgramRunType WhetherOrNotUserIsLoggedOn -DiskSpaceRequirement $config.settings.diskspace -DiskSpaceUnit MB -Duration $config.settings.timeout -DriveMode RenameWithUnc
-				Get-CMPackage -Name $pkg_name | Start-CMContentDistribution -DistributionPointName "brc-sccm-02.bristolcapital.ru"
+				Get-CMPackage -Name $pkg_name | Start-CMContentDistribution -DistributionPointName "srv-sccm-02.contoso.com"
 			}
 			catch
 			{
@@ -91,7 +91,7 @@ foreach($file in $files)
 			Write-Host ("  Deploing to: " + $collection)
 			try
 			{
-				New-CMPackageDeployment -StandardProgram -PackageName $pkg_name -ProgramName SPM -CollectionName $collection -DistributionPointName "brc-sccm-02.bristolcapital.ru" -DeployPurpose Required -SendWakeupPacket $false -ScheduleEvent AsSoonAsPossible -RerunBehavior RerunIfFailedPreviousAttempt -FastNetworkOption DownloadContentFromDistributionPointAndRunLocally -SlowNetworkOption DownloadContentFromDistributionPointAndLocally -Confirm:$false
+				New-CMPackageDeployment -StandardProgram -PackageName $pkg_name -ProgramName SPM -CollectionName $collection -DistributionPointName "srv-sccm-02.contoso.com" -DeployPurpose Required -SendWakeupPacket $false -ScheduleEvent AsSoonAsPossible -RerunBehavior RerunIfFailedPreviousAttempt -FastNetworkOption DownloadContentFromDistributionPointAndRunLocally -SlowNetworkOption DownloadContentFromDistributionPointAndLocally -Confirm:$false
 			}
 			catch
 			{
