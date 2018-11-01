@@ -1,5 +1,5 @@
 $smtp_from = "orchestrator@contoso.com"
-$smtp_to = @("Pavel.Koveshnikov@contoso.com", "Aleksandr.Panfilov@contoso.com", "Aleksander.Prokin@contoso.com")
+$smtp_to = @("admin@contoso.com")
 $smtp_сс = "admin@contoso.com"
 $smtp_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
 $smtp_server = "smtp.contoso.com"
