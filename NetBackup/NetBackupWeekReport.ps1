@@ -244,8 +244,8 @@ $body += @'
 
 foreach($p_key in $calendar.Keys)
 {
-    $day = Get-Date -Year $year -Month $month -Day 1
-    $dow = [int] $day.DayOfWeek
+    #$day = Get-Date -Year $year -Month $month -Day 1
+    #$dow = [int] $day.DayOfWeek
 
     $body += @'
 <h2>{0}</h2>
