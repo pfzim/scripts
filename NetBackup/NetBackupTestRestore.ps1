@@ -1,4 +1,4 @@
-#srv-nbtest-01.MSSQL7.BRC-NBTEST-01.db.TestDB.~.7.001of001.20180913153524..C:\
+#srv-nbtest-01.MSSQL7.srv-NBTEST-01.db.TestDB.~.7.001of001.20180913153524..C:\
 
 $media = @{
 	"0432L6" = "LQ0432L6"; 

@@ -1,6 +1,10 @@
+# Collect jobs log
+
+$ErrorActionPreference = "Stop"
+
 $date = (Get-Date -format "yyyy-MM-dd-HHmm")
 $file = ("c:\scripts\logs\jobs-" + $date + ".json")
-$data = & 'C:\Program Files\Veritas\NetBackup\bin\admincmd\bpdbjobs.exe' -ignore_parent_jobs -json
+$data = & 'C:\Program Files\Veritas\NetBackup\bin\admincmd\bpdbjobs.exe' -json
 Set-Content -Path $file -Value $data
 
 # merge jobs to one file
@@ -33,7 +37,7 @@ $jobs_list = @()
 
 foreach($j in $json_result)
 {
-    if($j.JobId -notin $jobs_list)
+    if($j.Status -eq 0 -and $j.State -eq 0 -and $j.JobId -notin $jobs_list)
     {
         $jobs_list += $j.JobId
     }    
@@ -41,7 +45,7 @@ foreach($j in $json_result)
 
 foreach($j in $json)
 {
-    if($j.JobId -notin $jobs_list)
+    if($j.Status -eq 0 -and $j.State -eq 0 -and $j.JobId -notin $jobs_list)
     {
         $jobs_list += $j.JobId
         $json_result += $j
@@ -52,7 +56,7 @@ $json_result | ConvertTo-Json -Depth 99 | Set-Content -Path $file
 
 # purge old files
 
-$date = (Get-Date).AddDays(-60)
+$date = (Get-Date).AddDays(-90)
 $files = Get-ChildItem ("c:\scripts\logs\")
 foreach($file in $files)
 {

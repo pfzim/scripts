@@ -1,6 +1,6 @@
 $clients = @{
 	"SQL_SystemDB" = @{
-		"brc-1c-03.conoso.com" = @{
+		"srv-1c-03.conoso.com" = @{
 			"Full-Day" = @{
 				"interval" = 7; 
 				"dblist" = @{

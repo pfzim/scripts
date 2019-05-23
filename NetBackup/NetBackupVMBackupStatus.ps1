@@ -7,11 +7,11 @@ $vmm_creds = New-Object System.Management.Automation.PSCredential ("domain\vmm_a
 
 $ErrorActionPreference = "Stop"
 
-$session = New-PSSession -ComputerName brc-vmm-01.contoso.com -Credential $vmm_creds
+$session = New-PSSession -ComputerName srv-vmm-01.contoso.com -Credential $vmm_creds
 $clients = Invoke-Command -Session $session -ScriptBlock {
 
     #Add-PSSnapin *VirtualMachineManager*
-    $vms = Get-SCVirtualMachine -VMMServer brc-vmm-01.contoso.com | select Name | Sort-Object -Unique Name
+    $vms = Get-SCVirtualMachine -VMMServer srv-vmm-01.contoso.com | select Name | Sort-Object -Unique Name
 
     return $vms.Name
 }
@@ -19,7 +19,7 @@ $clients = Invoke-Command -Session $session -ScriptBlock {
 Remove-PSSession $session
 
 #$clients = Get-Content -Path "C:\temp\zimin\vms.txt" | Sort-Object -Unique
-#$clients = @("brc-scom-01")
+#$clients = @("srv-scom-01")
 
 $exclude = Get-Content -Path "c:\scripts\vm-exclude-list.txt"
 

@@ -1,4 +1,6 @@
-# rebuild jobs month log file
+# rebuild result jobs log file for current month
+
+$ErrorActionPreference = "Stop"
 
 $date = Get-Date
 $file_name = ("c:\scripts\logs\result-jobs-" + (Get-Date -format "yyyy-MM") + ".json")
@@ -27,7 +29,7 @@ foreach($file in $files)
 
         foreach($j in $json)
         {
-            if($j.Status -eq 0 -and $j.JobId -notin $jobs_list)
+            if($j.Status -eq 0 -and $j.State -eq 0 -and $j.JobId -notin $jobs_list)
             {
                 $jobs_list += $j.JobId
                 $json_result += $j
