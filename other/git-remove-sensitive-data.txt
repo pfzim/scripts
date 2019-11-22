@@ -1,0 +1,24 @@
+https://palexander.posthaven.com/remove-a-password-from-gits-commit-history-wi
+
+# Sync with the remote master
+git pull
+
+# Force your clone to look like HEAD
+git reset --hard
+
+# AGAIN, A WARNING: This can really break stuff!
+
+# Run your filter branch command, replacing all instances of "password" with "your_password"
+# The example looks for Ruby files ("*.rb"), you can change this to match your needs
+git filter-branch --tree-filter 'git ls-files -z "*.rb" |xargs -0 perl -p -i -e "s#(password)#your_password#g"' -- --all
+
+# Overwrite your master with local changes
+git push origin master --force
+
+
+
+# My edition
+
+git pull
+git filter-branch --tree-filter "find . -name '*.php' -exec sed -i -e 's/password/**SECRET**/g' -e 's/login/**SECRET**/g' {} \;"
+git push origin master --force
