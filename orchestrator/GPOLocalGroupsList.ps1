@@ -2,29 +2,41 @@
 
 $global:mail = ''
 
-$smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
-
-$smtp_to = @("admin@contoso.com")
-$smtp_server = "smtp.contoso.com"
-
-if($global:mail)
-{
-	$smtp_to += @($global:mail)
-}
-
-$global:gpo_path = '\\contoso.com\SYSVOL\contoso.com\Policies\{74D81F96-AC85-4F56-A914-B63BE6C4E6AD}'
+$global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
 $ErrorActionPreference = 'Stop'
 
 $global:result = 0
 $global:error_msg = ''
-$global:table = ''
+
+trap
+{
+	$global:result = 1
+	$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
+	return;
+}
+
+. c:\orchestrator\settings\settings.ps1
+
+$global:smtp_to = @($global:admin_email)
+
+if($global:mail)
+{
+	$global:smtp_to += @($global:mail)
+}
 
 function main()
 {
+	trap
+	{
+		$global:result = 1
+		$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
+		return;
+	}
+
 	try
 	{
-		[xml] $xml = Get-Content -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_path)
+		[xml] $xml = Get-Content -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path)
 	}
 	catch
 	{
@@ -34,20 +46,21 @@ function main()
 	}
 
 	$count = 0
+	$table = @()
 	
 	try
 	{
 		# List entries
 		
-		$global:table = '<table>'
-		$global:table +=  '<tr><th>Login</th><th>Computer</th></tr>'
-		
 		foreach($group in $xml.Groups.Group)
 		{
-			$global:table +=  '<tr><td>{0}</td><td>{1}</td></tr>' -f ($group.Properties.Members.Member.name -join '; '), ($group.Filters.FilterComputer.name -join '; ')
+			$output = new-object psobject
+			$output | add-member noteproperty "GroupName" $group.Properties.groupName
+			$output | add-member noteproperty "Members" ($group.Properties.Members.Member.name -join '; ')
+			$output | add-member noteproperty "Computers" ($group.Filters.FilterComputer.name -join '; ')
+
+			$table += $output
 		}
-		
-		$global:table += '</table>'
 	}
 	catch
 	{
@@ -55,11 +68,8 @@ function main()
 		$global:error_msg = 'Ошибка чтения из политики: {0}' -f $_.Exception.Message
 		return
 	}
-}
 
-main
-
-$body = @'
+	$body = @'
 <html>
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -79,21 +89,37 @@ $body = @'
 <body>
 '@
 
-$body += '<h2>Список предоставленных прав локального администратора на ПК</h2>'
-$body += $global:table
-$body += $global:error_msg
+	$body += '<h2>Список предоставленных локальных прав на ПК</h2>'
 
-$body += @'
+	$body += '<table>'
+	$body +=  '<tr><th>Local group</th><th>Login</th><th>Computer</th></tr>'
+	
+	$table = $table | Sort-Object GroupName, Members, Computers
+	
+	foreach($row in $table)
+	{
+		$body +=  '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $row.GroupName, $row.Members, $row.Computers
+	}
+	
+	$body += '</table>'
+
+	$body += $global:error_msg
+
+	$body += @'
+<br /><small><a href="http://web.bristolcapital.ru/orchestrator/start-runbook.php?id=3db0cebd-3339-4aec-959c-0138a5ba7e0d&param[fe287297-b00d-4ece-94e4-eb9a56297cd2]={0}">Сформировать отчёт заново</a></small>
 </body>
 </html>
-'@
+'@ -f $global:mail
 
-try
-{
-	Send-MailMessage -from "orchestrator@contoso.com" -to $smtp_to -Encoding UTF8 -subject "Список предоставленных прав локального администратора на ПК" -bodyashtml -body $body -smtpServer $smtp_server -Credential $smtp_creds
+	try
+	{
+		Send-MailMessage -from $global:smtp_from -to $global:smtp_to -Encoding UTF8 -subject "Список предоставленных локальных прав на ПК" -bodyashtml -body $body -smtpServer $global:smtp_server -Credential $global:smtp_creds
+	}
+	catch
+	{
+		$global:result = 1
+		$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
+	}
 }
-catch
-{
-	$global:result = 1
-	$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
-}
+
+main
