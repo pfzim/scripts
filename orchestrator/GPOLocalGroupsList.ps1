@@ -4,8 +4,6 @@ $global:mail = ''
 
 $global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
-$ErrorActionPreference = 'Stop'
-
 $global:result = 0
 $global:error_msg = ''
 
@@ -15,6 +13,8 @@ trap
 	$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
 	return;
 }
+
+$ErrorActionPreference = 'Stop'
 
 . c:\orchestrator\settings\settings.ps1
 

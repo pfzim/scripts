@@ -1,4 +1,4 @@
-# Exchange transport rule - remove address from list
+# Exchange transport rule - add address to list
 
 $global:address = ''
 
@@ -32,7 +32,7 @@ function main()
 
 	# Проверка корректности заполнения полей
 
-	if($global:address -eq 'placeholder@example.org' -or $global:address -notmatch '^.+@.+\..+$')
+	if($global:address -eq '' -or $global:address -notmatch '^.+@.+\..+$')
 	{
 		$global:result = 1
 		$global:error_msg = 'Ошибка: Не корректно заполнены обязательные поля'
@@ -54,64 +54,71 @@ function main()
 			$list = (Get-TransportRule -Identity $rule).SentTo
 			if($list -contains $global:address)
 			{
-				$list = @($list | Where-Object { $_ -ne $global:address })
-				if($list.Count -gt 0)
-				{
-					Set-TransportRule -Identity $rule -SentTo $list
-
-					$list = (Get-TransportRule -Identity $rule).From
-					if($list -notcontains $global:address)
-					{
-						$global:error_msg += ("Адрес {0} успешно удален из правила {1}`r`n" -f $global:address, $rule)
-					}
-					else
-					{
-						$global:result = 1
-						$global:error_msg += ("Неизвестная ошибка: Адрес {0} не был удален из правила {1}`r`n" -f $global:address, $rule)
-					}				
-				}
-				else
-				{
-					$global:result = 1
-					$global:error_msg += ("Ошибка: Вы пытаетесь удалить последний адрес из правила {0}. Список адресов не может оставаться пустым`r`n" -f $rule)
-				}
-			}
-			else
-			{
-				$global:error_msg += ("Адрес {0} не найден в правиле {1}`r`n" -f $global:address, $rule)
+				$address_exist = 1
+				$global:error_msg += ("Адрес {0} уже присутствует в правиле {1}`r`n" -f $global:address, $rule)
+				break
 			}
 		}
 
+		if(!$address_exist)
+		{
+			$address_exist = 0
+			foreach($rule in $rules_out)
+			{
+				$list = (Get-TransportRule -Identity $rule).SentTo
+				$list += $global:address
+				Set-TransportRule -Identity $rule -SentTo $list
+
+				$list = (Get-TransportRule -Identity $rule).SentTo
+				if($list -contains $global:address)
+				{
+					$address_exist = 1
+					$global:error_msg += ("Адрес {0} успешно добавлен в правило {1}`r`n" -f $global:address, $rule)
+					break
+				}
+			}
+			
+			if(!$address_exist)
+			{
+				$global:result = 1
+				$global:error_msg += ("Неизвестная ошибка: Адрес {0} не был добавлен ни в одно правило`r`n" -f $global:address)
+			}
+		}
+	
+		$address_exist = 0
+		
 		foreach($rule in $rules_in)
 		{
 			$list = (Get-TransportRule -Identity $rule).From
 			if($list -contains $global:address)
 			{
-				$list = @($list | Where-Object { $_ -ne $global:address })
-				if($list.Count -gt 0)
-				{
-					Set-TransportRule -Identity $rule -From $list
+				$address_exist = 1
+				$global:error_msg += ("Адрес {0} уже присутствует в правиле {1}`r`n" -f $global:address, $rule)
+				break
+			}
+		}
 
-					$list = (Get-TransportRule -Identity $rule).From
-					if($list -notcontains $global:address)
-					{
-						$global:error_msg += ("Адрес {0} успешно удален из правила {1}`r`n" -f $global:address, $rule)
-					}
-					else
-					{
-						$global:result = 1
-						$global:error_msg += ("Неизвестная ошибка: Адрес {0} не был удален из правила {1}`r`n" -f $global:address, $rule)
-					}				
-				}
-				else
+		if(!$address_exist)
+		{
+			foreach($rule in $rules_in)
+			{
+				$list = (Get-TransportRule -Identity $rule).From
+				$list += $global:address
+				Set-TransportRule -Identity $rule -From $list
+
+				$list = (Get-TransportRule -Identity $rule).From
+				if($list -contains $global:address)
 				{
-					$global:result = 1
-					$global:error_msg += ("Ошибка: Вы пытаетесь удалить последний адрес из правила {0}. Список адресов не может оставаться пустым`r`n" -f $rule)
+					$address_exist = 1
+					$global:error_msg += ("Адрес {0} успешно добавлен в правило {1}`r`n" -f $global:address, $rule)
+					break
 				}
 			}
-			else
+
+			if(!$address_exist)
 			{
-				$global:error_msg += ("Адрес {0} не найден в правиле {1}`r`n" -f $global:address, $rule)
+				$global:result = 1
+				$global:error_msg += ("Неизвестная ошибка: Адрес {0} не был добавлен ни в одно правило`r`n" -f $global:address)
 			}
 		}
 		
@@ -125,7 +132,7 @@ function main()
 		return
 	}
 
-	$subject = ('E-Mail address unblocked: {0}' -f $global:address)
+	$subject = ('E-Mail address blocked: {0}' -f $global:address)
 
 	# Отправка информационного письма
 
@@ -138,7 +145,7 @@ function main()
 	</style>
 </head>
 <body>
-Был разблокирован адрес:<br />
+Был заблокирован адрес:<br />
 <br />
 '@
 
