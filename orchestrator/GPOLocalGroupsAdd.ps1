@@ -3,6 +3,7 @@
 $global:login = ''
 $global:compname = ''
 $global:code = ''
+$global:comment = ''
 
 $global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
@@ -17,6 +18,8 @@ trap
 }
 
 $ErrorActionPreference = 'Stop'
+
+$global:retry_count = 8
 
 . c:\orchestrator\settings\settings.ps1
 
@@ -56,11 +59,24 @@ function main()
 		$global:error_msg += "Введён некорректный код операции`r`n";
 		return;
 	}
+	
+	try
+	{
+		$domain = Get-ADDomain
+	}
+	catch
+	{
+		$global:result = 1
+		$global:error_msg += 'Ошибка: {0}' -f $_.Exception.Message
+		return
+	}
 
+	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path, $domain.PDCEmulator)
+	
 	# Create policy backup
 	try
 	{
-		Copy-Item -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path) -Destination ('c:\_backup\Groups-{0}.xml' -f (Get-Date -format "yyyy-MM-dd-HHmmss"))
+		Copy-Item -Path $xml_file -Destination ('c:\_backup\Groups-{0}.xml' -f (Get-Date -format "yyyy-MM-dd-HHmmss"))
 	}
 	catch
 	{
@@ -109,7 +125,7 @@ function main()
 
 	try
 	{
-		[xml] $xml = Get-Content -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path)
+		[xml] $xml = Get-Content -Path $xml_file
 	}
 	catch
 	{
@@ -134,7 +150,7 @@ function main()
 						{
 							if($filter.Name -eq $comp.Name)
 							{
-								$global:result = 1
+								$global:result = 0
 								$global:error_msg += 'Duplicate entry found: {2} : {0} at {1}' -f $user.'msDS-PrincipalName', $comp.Name, $group.Name
 								if($group.Properties.groupSid -eq 'S-1-5-32-544')
 								{
@@ -268,15 +284,25 @@ function main()
 		return
 	}
 
-	try
+	$fail = $global:retry_count
+	while($fail -gt 0)
 	{
-		$xml.Save(('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path))
-	}
-	catch
-	{
-		$global:result = 1
-		$global:error_msg += 'Ошибка сохранения политики: {0}' -f $_.Exception.Message
-		return
+		try
+		{
+			$xml.Save($xml_file)
+			$fail = 0
+		}
+		catch
+		{
+			$fail--
+			if($fail -eq 0)
+			{
+				$global:result = 1
+				$global:error_msg += 'Ошибка сохранения политики: {0}' -f $_.Exception.Message
+				return
+			}
+			Start-Sleep -Seconds 10
+		}
 	}
 
 
@@ -297,10 +323,11 @@ function main()
 Пользователь: <b>{0}</b><br />
 Компьютер: <b>{1}</b><br />
 Код операции: <b>{3}</b><br />
+Номер заявки: <b>{4}</b><br />
 <br />
 <br />
 <u>Техническая информация</u>:<br />{2}<br />
-'@ -f $global:login, $compname, $global:error_msg, $global:code
+'@ -f $global:login, $compname, $global:error_msg, $global:code, $global:comment
 
 	$body += @'
 </body>

@@ -36,7 +36,20 @@ function main()
 
 	try
 	{
-		[xml] $xml = Get-Content -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path)
+		$domain = Get-ADDomain
+	}
+	catch
+	{
+		$global:result = 1
+		$global:error_msg += 'Ошибка: {0}' -f $_.Exception.Message
+		return
+	}
+
+	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path, $domain.PDCEmulator)
+
+	try
+	{
+		[xml] $xml = Get-Content -Path $xml_file
 	}
 	catch
 	{

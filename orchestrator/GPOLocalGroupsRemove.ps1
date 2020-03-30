@@ -18,6 +18,8 @@ trap
 
 $ErrorActionPreference = 'Stop'
 
+$global:retry_count = 8
+
 . c:\orchestrator\settings\settings.ps1
 
 $global:smtp_to = @($global:admin_email, $global:helpdesk_email, $global:techsupport_email, $global:useraccess_email)
@@ -50,10 +52,23 @@ function main()
 		return;
 	}
 
+	try
+	{
+		$domain = Get-ADDomain
+	}
+	catch
+	{
+		$global:result = 1
+		$global:error_msg += 'Ошибка: {0}' -f $_.Exception.Message
+		return
+	}
+	
+	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path, $domain.PDCEmulator)
+	
 	# Create policy backup
 	try
 	{
-		Copy-Item -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path) -Destination ('c:\_backup\Groups-{0}.xml' -f (Get-Date -format "yyyy-MM-dd-HHmmss"))
+		Copy-Item -Path $xml_file -Destination ('c:\_backup\Groups-{0}.xml' -f (Get-Date -format "yyyy-MM-dd-HHmmss"))
 	}
 	catch
 	{
@@ -102,7 +117,7 @@ function main()
 
 	try
 	{
-		[xml] $xml = Get-Content -Path ('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path)
+		[xml] $xml = Get-Content -Path $xml_file
 	}
 	catch
 	{
@@ -153,15 +168,25 @@ function main()
 		return
 	}
 	
-	try
+	$fail = $global:retry_count
+	while($fail -gt 0)
 	{
-		$xml.Save(('{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path))
-	}
-	catch
-	{
-		$global:result = 1
-		$global:error_msg += 'Ошибка сохранения политики: {0}' -f $_.Exception.Message
-		return
+		try
+		{
+			$xml.Save($xml_file)
+			$fail = 0
+		}
+		catch
+		{
+			$fail--
+			if($fail -eq 0)
+			{
+				$global:result = 1
+				$global:error_msg += 'Ошибка сохранения политики: {0}' -f $_.Exception.Message
+				return
+			}
+			Start-Sleep -Seconds 10
+		}
 	}
 
 	$body = @'
