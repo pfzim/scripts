@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 
 . c:\orchestrator\settings\settings.ps1
 
-$global:smtp_to = @($global:admin_email)
+$global:smtp_to = @($global:admin_email, $global:helpdesk_email)
 
 $global:result = 0
 $global:error_msg = ''
@@ -34,7 +34,7 @@ function main()
 
 	# Проверка корректности заполнения полей
 
-	if($global:login -eq '' -or $global:collection -eq '' -or $global:state -cnotin ('ALL', 'DISCONNECTED', 'ACTIVE', 'CONNECTED'))
+	if($global:login -eq '' -or $global:collection -eq '' -or $global:state -notin ('ALL', 'DISCONNECTED', 'ACTIVE', 'CONNECTED'))
 	{
 		$global:result = 1
 		$global:error_msg = 'Ошибка: Не корректно заполнены обязательные поля'
@@ -112,7 +112,7 @@ function main()
 
 			# Проверка существования коллекции
 
-			if($collection -ne 'ALL_COLLECTIONS')
+			if($collection -notin ('ALL', 'ALL_COLLECTIONS'))
 			{
 				$collections = Get-RDSessionCollection -ConnectionBroker $broker
 				
@@ -131,13 +131,14 @@ function main()
 			foreach($session in $sessions)
 			{
 				if(
-					($collection -eq 'ALL_COLLECTIONS' -or $session.CollectionName -eq $collection) -and
+					($collection -in ('ALL', 'ALL_COLLECTIONS') -or $session.CollectionName -eq $collection) -and
 					($login -eq 'ALL_USERS' -or $session.UserName -eq $samaccount) -and
 					($state -eq 'ALL' -or $session.SessionState -eq ('STATE_{0}' -f $state))
 				)
 				{
 					$table += '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td></tr>' -f $session.CollectionName, $session.HostServer, $session.UserName, $session.SessionState
-					#### $session | Invoke-RDUserLogoff -Force | Out-Null
+					# Завершение сессии пользователя
+					$session | Invoke-RDUserLogoff -Force | Out-Null
 				}
 			}
 			
