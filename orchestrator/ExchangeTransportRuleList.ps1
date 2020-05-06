@@ -3,6 +3,9 @@
 $global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 $global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
+$global:rules_out = @('Запрещено в интернет', 'Запрещено в интернет 2')
+$global:rules_in = @('Запрещено из интернета', 'Запрещено из интернета 2')
+
 trap
 {
 	$global:result = 1
@@ -28,9 +31,6 @@ function main()
 		return;
 	}
 
-	$rules_out = @('Запрещено в интернет', 'Запрещено в интернет 2')
-	$rules_in = @('Запрещено из интернета', 'Запрещено из интернета 2')
-
 	try
 	{
 		$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:exch_conn_uri -Credential $global:exch_creds -Authentication Basic
@@ -39,13 +39,13 @@ function main()
 		$address_exist = 0
 
 		$list_out = $null
-		foreach($rule in $rules_out)
+		foreach($rule in $global:rules_out)
 		{
 			$list_out += (Get-TransportRule -Identity $rule).SentTo
 		}
 
 		$list_in = $null
-		foreach($rule in $rules_in)
+		foreach($rule in $global:rules_in)
 		{
 			$list_in += (Get-TransportRule -Identity $rule).From
 		}
