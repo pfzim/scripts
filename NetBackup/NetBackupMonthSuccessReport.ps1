@@ -1,8 +1,11 @@
-$smtp_from = "orchestrator@contoso.com"
-$smtp_to = "admin@contoso.com"
-$smtp_server = "smtp.contoso.com"
+# Month success jobs report
 
-$smtp_creds = New-Object System.Management.Automation.PSCredential ("contoso\smtp_login", (ConvertTo-SecureString "Passw0rd" -AsPlainText -Force))
+. c:\scripts\inc.config.ps1
+
+$global:smtp_creds = New-Object System.Management.Automation.PSCredential ($global:g_config.smtp_login, (ConvertTo-SecureString $global:g_config.smtp_passwd -AsPlainText -Force))
+
+$report_date = (Get-Date).AddMonths(-1)
+#$report_date = Get-Date
 
 # parse policies
 
@@ -34,10 +37,10 @@ for($i = 0; $i -lt $data.Count; $i++)
         {
             $schedule = $matches[1]
             ("  " + $matches[1])
-            $skip_schedule = ($schedule -notmatch "Full")
+            $skip_schedule = ($schedule -notmatch 'Full')
             if(!$skip_schedule)
             {
-                $policies[$class]['schedules'][$schedule] = @{}
+                $policies[$class]['schedules'][$schedule] = @{calendar = $false}
             }
         }
         elseif($row -match '^CLIENT ([^\s]+) ([^\s]+) ([^\s]+)\s')
@@ -57,6 +60,16 @@ for($i = 0; $i -lt $data.Count; $i++)
                 ("    SCHEDCALEDAYOWEEK: " + $matches[1])
                 $policies[$class]['schedules'][$schedule]['exclude'] = $matches[1]
             }
+            elseif($row -match '^SCHEDCALDAYOWEEK (.+)')
+            {
+                ("    SCHEDCALEDAYOWEEK: " + $matches[1])
+                $policies[$class]['schedules'][$schedule]['include'] = $matches[1]
+            }
+            elseif($row -match '^SCHEDCALENDAR')
+            {
+                ("    SCHEDCALEDAYOWEEK: " + $matches[1])
+                $policies[$class]['schedules'][$schedule]['calendar'] = $true
+            }
         }
     }
 }
@@ -65,7 +78,6 @@ for($i = 0; $i -lt $data.Count; $i++)
 
 # create launches calendar
 
-$report_date = (Get-Date).AddMonths(-1)
 $month = $report_date.Month
 $year = $report_date.Year
 $dom = [datetime]::DaysInMonth($year,$month)
@@ -96,6 +108,9 @@ foreach($p_key in $policies.Keys)
             #("  DAY : " + $day['date'])
             $dow = [int] $date.DayOfWeek
             $wom = [math]::floor(($date.day - (6+$dow)%7 + 5)/7)+1
+			# NetBackup specific week number of month
+			$nb_wom = [math]::floor(($date.day-1)/7)+1
+			
             #$day['schedules'] = @()
 			$client['days'][[string] $i] = @{}
 
@@ -105,9 +120,14 @@ foreach($p_key in $policies.Keys)
                 #$schedule = $policies[$p_key][$s_key]
                 if($policies[$p_key]['schedules'][$s_key].windows[$dow*2])
                 {
-                    if($policies[$p_key]['schedules'][$s_key].exclude -notmatch ("" + ($dow+1) + ',' + $wom))
-                    {
-			            $client['days'][[string] $i][$s_key] = 'error'
+					if($policies[$p_key]['schedules'][$s_key].exclude -notmatch ("" + ($dow+1) + ',' + $nb_wom) -and (
+							!$policies[$p_key]['schedules'][$s_key].calendar -or
+							$policies[$p_key]['schedules'][$s_key].include -match ("" + ($dow+1) + ',' + $nb_wom) -or
+							(($date.day + 7) -gt $dom -and $policies[$p_key]['schedules'][$s_key].include -match ("" + ($dow+1) + ',5'))
+						)
+					)
+					{
+						$client['days'][[string] $i][$s_key] = 'error'
                     }
                 }
             }
@@ -129,6 +149,7 @@ foreach($p_key in $policies.Keys)
 
 $date = ($report_date).ToString("yyyy-MM")
 $file = ("c:\scripts\logs\result-jobs-" + $date + ".json")
+("Loading: " + $file)
 
 try
 {
@@ -143,9 +164,23 @@ catch
 $report_start = Get-Date -Year $report_date.Year -Month $report_date.Month -Day 1 -Hour 0 -Minute 0 -Second 0
 $report_end = Get-Date -Year $report_date.Year -Month $report_date.Month -Day $dom -Hour 23 -Minute 59 -Second 59
 
+"Finding all success jobs..."
+
+$success_jobs = [System.Collections.ArrayList]@()
+
 foreach($j in $json)
 {
-	if($j.ScheduleName -match '^Full')
+	if($j.Status -eq 0)
+	{
+		[void] $success_jobs.Add($j.JobId)
+	}
+}
+
+"Generating calendar..."
+
+foreach($j in $json)
+{
+	if($j.ScheduleName -match 'Full')
 	{
 		if($calendar.ContainsKey($j.PolicyName))
 		{
@@ -153,15 +188,19 @@ foreach($j in $json)
 			{
 				# fix names
 				$c_name = ($client['name'].split('.'))[0]
-				if($c_name -match "^srv-vsql")
+				if($c_name -match "^srv-vsql-0[12]")
 				{
 					$c_name += "|srv-sql-01|srv-sql-02"
+				}
+				if($c_name -match "^srv-vsql-03")
+				{
+					$c_name += "|srv-sql-05|srv-sql-06"
 				}
 
 				if($j.Status -eq 0 -and $j.ClientName -match $c_name -and ($client['instance'] + "\" + $client['db']) -eq $j.InstanceDatabaseName)
 				{
 					$jst = ((Get-Date "1970-01-01 00:00:00.000Z") + ([TimeSpan]::FromSeconds($j.StartTime)))
-					if($jst -ge $report_start -and $jst -le $report_end)
+					if($jst -ge $report_start -and $jst -le $report_end -and $j.ParentJobID -in $success_jobs)
 					{
 						if($client['Days'][[string] $jst.Day].ContainsKey($j.ScheduleName))
 						{
@@ -186,6 +225,8 @@ foreach($j in $json)
 #$calendar | ConvertTo-Json -Depth 99
 
 # print report
+
+"Generating report..."
 
 $title = "NetBackup month report ({0})" -f $date
 
@@ -212,6 +253,11 @@ $body = @'
 
 $body += @'
 <h1>{0}</h1>
+<p>
+<span class="pass">Успешно</span> выполнено по расписанию</br>
+<span class="warn">Успешно</span> выполнено не по расписанию</br>
+<span class="error">Не выполнено</span> по запланированному расписанию
+</p>
 '@ -f $title
 
 foreach($p_key in $calendar.Keys)
@@ -281,4 +327,4 @@ $body += @'
 </html>
 '@
 
-Send-MailMessage -from $smtp_from -to $smtp_to -Encoding UTF8 -subject $title -bodyashtml -body $body -smtpServer $smtp_server -Credential $smtp_creds
+Send-MailMessage -from $global:g_config.smtp_from -to $global:g_config.smtp_to -Encoding UTF8 -subject $title -bodyashtml -body $body -smtpServer $global:g_config.smtp_server -Credential $global:smtp_creds -Priority High
