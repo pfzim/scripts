@@ -3,18 +3,21 @@
 $global:login = ''
 
 $global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
-$global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+
+$global:subject = ''
+$global:body = ''
+
+$ErrorActionPreference = 'Stop'
 
 $global:result = 0
 $global:error_msg = ''
-
-$ErrorActionPreference = 'Stop'
 
 $global:retry_count = 5
 
 . c:\orchestrator\settings\config.ps1
 
 $global:smtp_to = @($global:g_config.admin_email, $global:g_config.helpdesk_email)
+$global:smtp_to = $global:smtp_to -join ','
 
 function main()
 {
@@ -53,6 +56,10 @@ function main()
 		return
 	}
 
+	# Выгрузка данных
+	
+	$text = ''
+
 	try
 	{
         $location = ''
@@ -69,6 +76,8 @@ function main()
                 }
 
 		        Copy-Item -Path $location -Destination $dst -Force -Recurse
+				
+				$text += 'Данные из папки {0} скопированы в {1}<br />' -f $location, $dst
 
                 $i++
             }
@@ -113,6 +122,8 @@ function main()
 				$stat = $mbex | Get-MailboxExportRequestStatistics
 			}
 			while($stat.Status.Value -notin ('Completed', 'Failed'))
+			
+			$text += 'Почтовый ящик {2} выгружен в файл {0}\{1}.pst<br />' -f $dst, $user.SamAccountName, $mail_box.PrimarySmtpAddress
 
 			if($stat.Status.Value -eq 'Completed')
 			{
@@ -133,42 +144,26 @@ function main()
 
 	Remove-PSSession -Session $session
 
-
-	$body = @'
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<style type="text/css">
-		body {font-family: Arial; font-size: 12pt;}
-	</style>
-</head>
-<body>
-'@
-
-	$body += @'
-Были выгружены данные пользователя {1}:<br />
+	$global:subject = 'Выгружены данные пользователя: {0}' -f $global:login
+	
+	$global:body = @'
+<h1>Были выгружены данные пользователя</h1>
 <br />
-Логин: <b>{1}</b><br />
-Путь: <b>{2}\{3}\</b><br />
+<p>
+Логин: <b>{0}</b><br />
+Путь: <b>{1}\{2}\</b><br />
+</p>
 <br />
+Выгружены следующие данные:<br />
+{3}
 <br />
-<u>Техническая информация</u>: {0}<br />
-'@ -f $global:error_msg, $global:login, $global:g_config.export_path, $user.SamAccountName
+'@ -f $global:login, $global:g_config.export_path, $user.SamAccountName, $text
 
-	$body += @'
-</body>
-</html>
-'@
-
-	try
-	{
-		Send-MailMessage -from $global:g_config.smtp_from -to $global:smtp_to -Encoding UTF8 -subject "Выгружены данные пользователя" -bodyashtml -body $body -smtpServer $global:g_config.smtp_server -Credential $global:smtp_creds
-	}
-	catch
-	{
-		$global:result = 1
-		$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
-	}
 }
 
 main
+
+if($global:result -ne 0)
+{
+	$global:body += "<br /><br /><pre class=`"error`">Техническая информация:`r`n`r`n{0}</pre>" -f $global:error_msg
+}
