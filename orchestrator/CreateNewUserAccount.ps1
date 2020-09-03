@@ -1,74 +1,138 @@
-$global:login = ""
-$global:full_name = ""
-$global:first_name = ""
-$global:last_name = ""
-$global:title = ""
-$global:department = ""
-$global:phone = ""
-$global:company_code = ""
+# Create new user account
 
-$creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
-$smtp_creds = New-Object System.Management.Automation.PSCredential ("", (ConvertTo-SecureString "" -AsPlainText -Force))
+$global:login = ''
+$global:full_name = ''
+$global:first_name = ''
+$global:last_name = ''
+$global:title = ''
+$global:department = ''
+$global:phone = ''
+$global:company_code = ''
+$global:region = ''
+$global:employeeid = ''
+$global:city = ''
+$global:exp_date = ''
+$global:curator = ''
+$global:manager = ''
+$global:email = ''
 
-$smtp_to = @("techsupport@contoso.com", "UserAccess@contoso.com")
+$global:creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
 $ErrorActionPreference = "Stop"
 
-$global:result = 1
-$global:error_msg = ""
+. c:\orchestrator\settings\config.ps1
+
+$global:result = 0
+$global:error_msg = ''
+
+$global:subject = ''
+$global:body = ''
+$global:smtp_to = @($global:g_config.helpdesk_email, $global:g_config.techsupport_email, $global:g_config.useraccess_email)
+$global:smtp_to = $global:smtp_to -join ','
+
+$global:retry_count = 15
+
+$global:company_code = $global:company_code.ToLower()
 
 function main()
 {
-	$list_company = @{
-		"sb" = @{
-			domain = "contoso.com";
-			path = "OU=Users,OU=ООО САДЫ БАКСАНА,OU=Company,DC=contoso,DC=com";
-			name = "ООО Сады Баксана";
-			city = "Нальчик";
-			subscribe = "CN=Рассылка - Все сотрудники ООО САДЫ БАКСАНА,OU=ООО САДЫ БАКСАНА,OU=Рассылки,DC=contoso,DC=com";
-		};
-		"kh" = @{
-			domain = "example.org";
-			path = "OU=Users,OU=ООО КАЗАЧИЙ ХУТОР,OU=Company,DC=contoso,DC=com";
-			name = "ООО Казачий Хутор";
-			city = "Владикавказ";
-			subscribe = "CN=Рассылка - Все сотрудники ООО КАЗАЧИЙ ХУТОР,OU=ООО КАЗАЧИЙ ХУТОР,OU=Рассылки,DC=contoso,DC=com";
-		};
-		"ar" = @{
-			domain = "example.com";
-			path = "OU=Users,OU=Ариана,OU=Company,DC=contoso,DC=com";
-			name = "ООО Ариана";
-			city = "Владикавказ";
-			subscribe = "CN=Рассылка - Все сотрудники ООО АРИАНА,OU=ООО АРИАНА,OU=Рассылки,DC=contoso,DC=com";
-		}
+	trap
+	{
+		$global:result = 1
+		$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс создания УЗ прерван!`r`n" -f $_.Exception.Message);
+		return;
 	}
-	
-	$company = $list_company[$global:company_code.ToLower()]
-	
+
+	$company = $global:g_config.list_company[$global:company_code]
+
 	# Проверка корректности заполнения полей
-	
+
 	if(!$company)
 	{
-		$global:error_msg = ("Ошибка: Неправильно указан код компании: " + $global:company_code.ToLower())
+		$global:error_msg = ('Ошибка: Неправильно указан код компании: {0}' -f $global:company_code)
 		return
 	}
-	
-	if($global:login -eq '' -or $global:full_name -eq '' -or $global:first_name -eq '' -or $global:last_name -eq '' -or $global:title -eq '')
+
+	if([string]::IsNullOrEmpty($global:login) -or [string]::IsNullOrEmpty($global:full_name) -or [string]::IsNullOrEmpty($global:first_name) -or [string]::IsNullOrEmpty($global:last_name) -or [string]::IsNullOrEmpty($global:title))
 	{
 		$global:error_msg = "Ошибка: Не заполнены все обязательные поля"
 		return
 	}
-	
-	if($global:phone -eq '')
+
+	if([string]::IsNullOrEmpty($global:email))
+	{
+		$global:email = ($global:login + "@" + $company.domain)
+	}
+
+	if([string]::IsNullOrEmpty($global:phone))
 	{
 		$global:phone = $null
 	}
-	
-	if($global:department -eq '')
+
+	if([string]::IsNullOrEmpty($global:department))
 	{
 		$global:department = $null
 	}
-	
+
+	if([string]::IsNullOrEmpty($global:employeeid))
+	{
+		$global:employeeid = $null
+	}
+
+	if([string]::IsNullOrEmpty($global:manager))
+	{
+		$global:manager = $null
+	}
+
+	if([string]::IsNullOrEmpty($global:curator))
+	{
+		$global:curator = $null
+	}
+	else
+	{
+		$global:curator = ("Курирующий менеджер: " + $global:curator)
+	}
+
+	if([string]::IsNullOrEmpty($global:exp_date))
+	{
+		$global:exp_date = $null
+	}
+	elseif($global:exp_date -notmatch '^\d\d\.\d\d\.\d\d\d\d$')
+	{
+		$global:error_msg = "Ошибка: Не верная дата (DD.MM.YYYY)"
+		return
+	}
+
+	# Fix OU path for TOF
+
+	if($global:company_code -eq "tof")
+	{
+		if($global:g_config.list_tof[$global:region])
+		{
+			$company.path = ('OU=Users,' + $global:g_config.list_tof[$global:region])
+		}
+		else
+		{
+			$global:error_msg = 'Ошибка: Не указан код региона для ТОФа'
+			return
+		}
+
+		if($global:city -ne '')
+		{
+			$company.city = $global:city
+		}
+	}
+
+	if($global:company_code -eq 'svc')
+	{
+		$global:login = ('svc_{0}' -f $global:login)
+	}
+
+	if($global:company_code -eq 'mbx')
+	{
+		$global:login = ('mbx_' -f $global:login)
+	}
+
 	# Проверка существования пользователя
 
 	$user = 0
@@ -83,28 +147,78 @@ function main()
 
 	if($user)
 	{
-		$global:error_msg = "Ошибка: Пользователь уже существует!"
+		$global:error_msg = 'Ошибка: Пользователь уже существует!'
 		return
 	}
 
-	$password_plain = (([char[]]"abcdefghiklmnoprstuvwxyzABCEFGHJKLMNPQRSTUVWXYZ23456789" | Get-Random -Count 8) -join '')
+	$password_plain = ('Tmp-{0}' -f (([char[]]"abcdefghikmnprstuvwxyzABCEFGHJKLMNPQRSTUVWXYZ23456789" | Get-Random -Count 4) -join ''))
 	$password = (ConvertTo-SecureString $password_plain -AsPlainText -Force)
 
 	# Создание УЗ пользователя
 
 	try
 	{
-		$user = New-ADUser -SamAccountName $global:login -UserPrincipalName ($global:login + "@" + $company.domain) -AccountPassword $password -Path $company.path -Name $global:full_name -DisplayName $global:full_name -GivenName $global:first_name -Surname $global:last_name -Title $global:title -Department $global:department -OfficePhone $global:phone -Company $company.name -City $company.city -PasswordNeverExpires:$false -ChangePasswordAtLogon:$true -Enabled:$true -PassThru
+		$user = New-ADUser -SamAccountName $global:login -UserPrincipalName ('{0}@{1}' -f $global:login, $company.domain) -AccountPassword $password -Path $company.path -Name $global:full_name -DisplayName $global:full_name -GivenName $global:first_name -Surname $global:last_name -Title $global:title -Department $global:department -OfficePhone $global:phone -Company $company.name -City $company.city -Description $global:curator -EmployeeID $global:employeeid -PasswordNeverExpires:$false -ChangePasswordAtLogon:$true -Enabled:$true -PassThru
 	}
 	catch
 	{
-		$global:error_msg = ("Ошибка создания УЗ пользователя (" + $_.Exception.Message + ")")
+		$global:error_msg = ("Ошибка создания УЗ пользователя ({0});`r`n" -f $_.Exception.Message)
 		return
+	}
+
+	# Добавление ссылки на аккаунт менеджера/руководителя
+	
+	if($global:manager)
+	{
+		$fail = $global:retry_count
+		while($fail -gt 0)
+		{
+			try
+			{
+				Set-ADUser -Identity $user -Manager $global:manager
+				$fail = 0
+			}
+			catch
+			{
+				Start-Sleep -Seconds 20
+				$fail--
+				if($fail -eq 0)
+				{
+					$global:result = 1
+					$global:error_msg += ("Ошибка установки руководителя {1} ({0});`r`n" -f $_.Exception.Message, $manager)
+				}
+			}
+		}
+	}
+
+	# Добавление в группы
+
+	foreach($group in $company.groups)
+	{
+		$fail = $global:retry_count
+		while($fail -gt 0)
+		{
+			try
+			{
+				Add-ADGroupMember -Identity $group -Members $global:login
+				$fail = 0
+			}
+			catch
+			{
+				Start-Sleep -Seconds 20
+				$fail--
+				if($fail -eq 0)
+				{
+					$global:result = 1
+					$global:error_msg += ("Ошибка добавления в группу {1} ({0});`r`n" -f $_.Exception.Message, $group)
+				}
+			}
+		}
 	}
 
 	# Очистка флага разрешающего установку пустого пароля
 
-	$fail = 5
+	$fail = $global:retry_count
 	while($fail -gt 0)
 	{
 		try
@@ -118,189 +232,268 @@ function main()
 			$fail--
 			if($fail -eq 0)
 			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка установки флага запрета пустого пароля (" + $_.Exception.Message + ");`r`n")
+				$global:result = 1
+				$global:error_msg += ("Ошибка установки флага запрета пустого пароля ({0});`r`n" -f $_.Exception.Message)
 			}
 		}
 	}
 
-	# Включение почтового ящика
+	# Установка срока жизни УЗ
 
-	$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://srv-exch-01.contoso.com/powershell/ -Credential $creds -Authentication Kerberos
-	Import-PSSession $session
+	if($global:exp_date)
+	{
+		$fail = $global:retry_count
+		while($fail -gt 0)
+		{
+			try
+			{
+				Set-ADAccountExpiration -Identity $global:login -DateTime $global:exp_date
+				$fail = 0
+			}
+			catch
+			{
+				Start-Sleep -Seconds 20
+				$fail--
+				if($fail -eq 0)
+				{
+					$global:result = 1
+					$global:error_msg += ("Ошибка установки срока жизни УЗ ({0});`r`n" -f $_.Exception.Message)
+				}
+			}
+		}
+	}
+	
+	# Настройка почтового ящика
 
-	$fail = 5
-	while($fail -gt 0)
+	if($company.mail)
 	{
 		try
 		{
-			Enable-Mailbox -Identity $global:login -PrimarySmtpAddress ($global:login + "@" + $company.domain)
-			$fail = 0
+			$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:g_config.exch_conn_uri -Credential $global:creds -Authentication Basic
+			Import-PSSession $session
+
+			# Включение почтового ящика
+
+			$fail = $global:retry_count
+			while($fail -gt 0)
+			{
+				try
+				{
+					Enable-Mailbox -Identity $global:login -PrimarySmtpAddress $global:email
+					$fail = 0
+				}
+				catch
+				{
+					Start-Sleep -Seconds 20
+					$fail--
+					if($fail -eq 0)
+					{
+						$global:result = 1
+						$global:error_msg += ("Ошибка включения почтового ящика ({0});`r`n" -f $_.Exception.Message)
+					}
+				}
+			}
+
+			# Установка квоты и отключение автоматического обновления адреса
+
+			$fail = $global:retry_count
+			while($fail -gt 0)
+			{
+				try
+				{
+					Set-Mailbox -Identity $global:login -IssueWarningQuota 960mb -ProhibitSendQuota 990mb -ProhibitSendReceiveQuota 1gb -UseDatabaseQuotaDefaults $false -EmailAddressPolicyEnabled $false
+					$fail = 0
+				}
+				catch
+				{
+					Start-Sleep -Seconds 20
+					$fail--
+					if($fail -eq 0)
+					{
+						$global:result = 1
+						$global:error_msg += ("Ошибка установки квоты на почтовый ящик ({0});`r`n" -f $_.Exception.Message)
+					}
+				}
+			}
+
+			# Включение ActiveSync и отключение POP3 и IMAP
+
+			$fail = $global:retry_count
+			while($fail -gt 0)
+			{
+				try
+				{
+					Set-CASMailbox -Identity $global:login -ActivesyncEnabled $true -PopEnabled $false -ImapEnabled $false
+					$fail = 0
+				}
+				catch
+				{
+					Start-Sleep -Seconds 20
+					$fail--
+					if($fail -eq 0)
+					{
+						$global:result = 1
+						$global:error_msg += ("Ошибка включения ActiveSync и отключения POP3 и IMAP ({0});`r`n" -f $_.Exception.Message)
+					}
+				}
+			}
+
+			if($company.subscribe)
+			{
+				$fail = $global:retry_count
+				while($fail -gt 0)
+				{
+					try
+					{
+						Add-DistributionGroupMember -Identity $company.subscribe -Member $global:login
+						$fail = 0
+					}
+					catch
+					{
+						Start-Sleep -Seconds 20
+						$fail--
+						if($fail -eq 0)
+						{
+							$global:result = 1
+							$global:error_msg += ("Ошибка добавления в группу рассылки ({0});`r`n" -f $_.Exception.Message)
+						}
+					}
+				}
+			}
+
+			Remove-PSSession -Session $session
 		}
 		catch
 		{
-			Start-Sleep -Seconds 20
-			$fail--
-			if($fail -eq 0)
-			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка включения почтового ящика (" + $_.Exception.Message + ");`r`n")
-			}
+			$global:result = 1
+			$global:error_msg += ("Критичная ошибка подключения к серверу Exchange ({0});`r`n" -f $_.Exception.Message)
 		}
 	}
-
-	# Установка квоты и отключение автоматического обновления адреса
-
-	$fail = 5
-	while($fail -gt 0)
+	
+	# Создание DFS ссылки на профиль
+	
+	if($company.profile_servers -and $company.dfs_link)
 	{
+		# Определяем самый свободный диск
+		
 		try
 		{
-			Set-Mailbox -Identity $global:login -IssueWarningQuota 960mb -ProhibitSendQuota 990mb -ProhibitSendReceiveQuota 1gb -UseDatabaseQuotaDefaults $false -EmailAddressPolicyEnabled $false
-			$fail = 0
+			$max = -1
+			$profile_path = $null
+
+			foreach($fs in $company.profile_servers)
+			{
+				$sess = New-CimSession -ComputerName $fs.server
+				$quota = Get-FsrmQuota -CimSession $sess -Path $fs.path
+				Remove-CimSession -CimSession $sess
+
+				$current = $quota.Size - $quota.Usage
+
+				if($current -gt $max)
+				{
+					$max = $current
+					$profile_path = $fs.share
+				}
+			}
+
+			$profile_path = '{0}\{1}' -f $profile_path, $user.SamAccountName
+
+			New-Item -ItemType 'directory' -Path $profile_path
+
+			# Назначаем необходимые права
+
+			$NewAcl = Get-Acl -Path $profile_path
+			$fileSystemAccessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($user.'msDS-PrincipalName', 'FullControl', 'Allow')
+			$NewAcl.SetAccessRule($fileSystemAccessRule)
+			Set-Acl -Path $profile_path -AclObject $NewAcl
+
+			# Создаем DFS-ссылку на профиль пользователя
+			New-DfsnFolder -Path ("{0}\{1}" -f $company.dfs_link, $user.SamAccountName) -TargetPath $profile_path
 		}
 		catch
 		{
-			Start-Sleep -Seconds 20
-			$fail--
-			if($fail -eq 0)
-			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка установки квоты на почтовый ящик (" + $_.Exception.Message + ");`r`n")
-			}
+			$global:result = 1
+			$global:error_msg += ("Критичная ошибка создания DFS ссылки на профиль ({0});`r`n" -f $_.Exception.Message)
 		}
 	}
-
-	# Включение ActiveSync и отключение POP3 и IMAP
-
-	$fail = 5
-	while($fail -gt 0)
-	{
-		try
-		{
-			Set-CASMailbox -Identity $global:login -ActivesyncEnabled $true -PopEnabled $false -ImapEnabled $false
-			$fail = 0
-		}
-		catch
-		{
-			Start-Sleep -Seconds 20
-			$fail--
-			if($fail -eq 0)
-			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка включения ActiveSync и отключения POP3 и IMAP (" + $_.Exception.Message + ");`r`n")
-			}
-		}
-	}
-
-	$fail = 5
-	while($fail -gt 0)
-	{
-		try
-		{
-			Add-DistributionGroupMember -Identity $company.subscribe -Member $global:login
-			$fail = 0
-		}
-		catch
-		{
-			Start-Sleep -Seconds 20
-			$fail--
-			if($fail -eq 0)
-			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка добавления в группу рассылки (" + $_.Exception.Message + ");`r`n")
-			}
-		}
-	}
-
-	Remove-PSSession -Session $session
 
 	# Включение Lync
 
-	$session = New-PSSession -ConnectionUri https://srv-sfb-01.contoso.com/OcsPowershell -Credential $creds
-	Import-PSSession $session
-
-	$fail = 5
-	while($fail -gt 0)
+	if($company.lync)
 	{
 		try
 		{
-			Enable-CsUser -Identity $global:login -RegistrarPool "srv-sfb-01.contoso.com" -SipAddressType EmailAddres -SipDomain $company.domain
-			$fail = 0
+			$session = New-PSSession -ConnectionUri $global:g_config.sfb_conn_uri -Credential $global:creds
+			Import-PSSession $session
+
+			$fail = $global:retry_count
+			while($fail -gt 0)
+			{
+				try
+				{
+					Enable-CsUser -Identity $global:login -RegistrarPool $global:g_config.sfb_pool -SipAddressType EmailAddress
+					$fail = 0
+				}
+				catch
+				{
+					Start-Sleep -Seconds 20
+					$fail--
+					if($fail -eq 0)
+					{
+						$global:result = 1
+						$global:error_msg += ("Ошибка включения Lync ({0});`r`n" -f $_.Exception.Message)
+					}
+				}
+			}
+
+			Remove-PSSession $session
 		}
 		catch
 		{
-			Start-Sleep -Seconds 20
-			$fail--
-			if($fail -eq 0)
-			{
-				$global:result = 2
-				$global:error_msg += ("Ошибка включения Lync (" + $_.Exception.Message + ");`r`n")
-			}
+			$global:result = 1
+			$global:error_msg += ("Критичная ошибка подключения к серверу Lync ({0});`r`n" -f $_.Exception.Message)
 		}
 	}
 
-	Remove-PSSession $session
+	# Отправка приветственного письма созданному пользователю
 
-	$body = @'
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<style type="text/css">
-		body{font-family: Courier New; font-size: 8pt;}
-		h1{font-size: 16px;}
-		h2{font-size: 14px;}
-		h3{font-size: 12px;}
-		table{border: 1px solid black; border-collapse: collapse; font-size: 8pt;}
-		th{border: 1px solid black; background: #dddddd; padding: 5px; color: #000000;}
-		td{border: 1px solid black; padding: 5px; }
-		.red {color: red;}
-		.pass {color: green;}
-		.warn {color: #ff6600;}
-		.error {background: #FF0000; color: #ffffff;}
-	</style>
-</head>
-<body>
-'@
-
-	$body += @'
-Был создан пользователь для {4} ({5}):<br />
-<br />
-Логин: {0}<br />
-Пароль: {1}<br />
-<br />
-E-mail: {0}@{2}<br />
-Web адрес почты:  https://webmail.contoso.com/owa<br />
-<br />
-OU: {7}<br />
-Группы рассылки: {6}<br />
-<br />
-Техническая информация: {3}<br />
-'@ -f $global:login, $password_plain, $company.domain, $global:error_msg, $company.name, $company.city, $company.subscribe, $company.path
-
-	$body += @'
-</body>
-</html>
-'@
-
-	try
+	if($company.welcome -and $company.mail)
 	{
-		Send-MailMessage -from "orchestrator@contoso.com" -to $smtp_to -Encoding UTF8 -subject ("User created: " + $global:login + " (" + $global:full_name + ")") -bodyashtml -body $body -smtpServer smtp.contoso.com -Credential $smtp_creds
-	}
-	catch
-	{
-		$global:result = 2
-		$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
+		try
+		{
+			$body = Get-Content -Path $company.welcome -Encoding UTF8 | Out-String
+			Send-MailMessage -from $global:g_config.wt_email -to $global:email -bcc $global:g_config.wt_email -Encoding UTF8 -subject $global:g_config.welcome_subject -bodyashtml -body $body -Attachments $company.attachments -smtpServer $global:g_config.smtp_server
+		}
+		catch
+		{
+			$global:result = 1
+			$global:error_msg += ("Ошибка отправки приветственного письма ({0});`r`n" -f $_.Exception.Message)
+		}
 	}
 
-	if($global:result -ne 2)
-	{
-		$global:result = 0
-	}
-	else
-	{
-		$global:result = 1
-	}
+	# Формирование информационного сообщения
+
+	$global:subject = ("User created: {0} ({1})" -f $global:login, $global:full_name)
+
+	$global:body = @'
+		<h1>Был создан пользователь для {3} ({4})</h1>
+		<p>
+			Логин: <b>{0}</b><br />
+			Пароль: <b>{1}</b><br />
+			<br />
+			E-mail: {7}<br />
+			Web адрес почты:  {8}<br />
+			<br />
+			<u>OU</u>: {6}<br />
+			<u>Группы рассылки</u>: {5}<br />
+			<u>Группы AD</u>: {9}
+		</p>
+'@ -f $global:login, $password_plain, $company.domain, $company.name, $company.city, $company.subscribe, $company.path, $global:email, $global:g_config.owa_link, ($company.groups -join ', ')
 }
 
 main
+
+if($global:result -ne 0)
+{
+	$global:body += "<br /><br /><pre class=`"error`">Техническая информация:`r`n`r`n{0}</pre>" -f $global:error_msg
+}
