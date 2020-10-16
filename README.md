@@ -10,3 +10,7 @@
 `windows-resistry` - different Windows registry settings
 
 `settings` - other linux configuration files
+
+`orchestrator/` - Runbooks for System Center Orchestrator
+
+`NetBackup/` - scripts for generate different reports
