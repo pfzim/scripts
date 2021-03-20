@@ -1,4 +1,4 @@
-# My useful scripts
+# [My useful scripts](https://github.com/pfzim/scripts)
 
 `rotate.cmd`,
 `rotate.sh`   - remove files olders than XX days and stay it if 1 or 15 day of month `backup-YYYY-MM-DD-any-name-here.ext`
@@ -10,3 +10,7 @@
 `windows-resistry` - different Windows registry settings
 
 `settings` - other linux configuration files
+
+`orchestrator/` - Runbooks for System Center Orchestrator
+
+`NetBackup/` - scripts for generate different reports
