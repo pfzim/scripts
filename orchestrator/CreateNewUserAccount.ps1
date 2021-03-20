@@ -16,9 +16,10 @@ $global:curator = ''
 $global:manager = ''
 $global:email = ''
 
-$global:creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+$global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+$global:ps_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 
 . c:\orchestrator\settings\config.ps1
 
@@ -128,10 +129,12 @@ function main()
 		$global:login = ('svc_{0}' -f $global:login)
 	}
 
+	<#
 	if($global:company_code -eq 'mbx')
 	{
 		$global:login = ('mbx_' -f $global:login)
 	}
+	#>
 
 	# Проверка существования пользователя
 
@@ -269,7 +272,7 @@ function main()
 	{
 		try
 		{
-			$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:g_config.exch_conn_uri -Credential $global:creds -Authentication Basic
+			$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:g_config.exch_conn_uri -Credential $global:exch_creds -Authentication Basic
 			Import-PSSession $session
 
 			# Включение почтового ящика
@@ -374,20 +377,28 @@ function main()
 	
 	if($company.profile_servers -and $company.dfs_link)
 	{
-		# Определяем самый свободный диск
-		
 		try
 		{
+			# Определяем самый свободный диск
+		
 			$max = -1
 			$profile_path = $null
+			$server = $null
 
 			foreach($fs in $company.profile_servers)
 			{
-				$sess = New-CimSession -ComputerName $fs.server
-				$quota = Get-FsrmQuota -CimSession $sess -Path $fs.path
-				Remove-CimSession -CimSession $sess
-
-				$current = $quota.Size - $quota.Usage
+				try
+				{
+					$sess = New-CimSession -ComputerName $fs.server
+					$quota = Get-FsrmQuota -CimSession $sess -Path $fs.path
+					$current = $quota.Size - $quota.Usage
+					Remove-CimSession -CimSession $sess
+				}
+				catch
+				{
+					$global:error_msg += ("Информация: Не был доступен сервер {1} ({0});`r`n" -f $_.Exception.Message, $fs.server)
+					continue
+				}
 
 				if($current -gt $max)
 				{
@@ -396,19 +407,32 @@ function main()
 				}
 			}
 
-			$profile_path = '{0}\{1}' -f $profile_path, $user.SamAccountName
+			if($profile_path)
+			{
+				$profile_path = '{0}\{1}' -f $profile_path, $user.SamAccountName
 
-			New-Item -ItemType 'directory' -Path $profile_path
+				New-Item -ItemType 'directory' -Path $profile_path
 
-			# Назначаем необходимые права
+				# Назначаем необходимые права
 
-			$NewAcl = Get-Acl -Path $profile_path
-			$fileSystemAccessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($user.'msDS-PrincipalName', 'FullControl', 'Allow')
-			$NewAcl.SetAccessRule($fileSystemAccessRule)
-			Set-Acl -Path $profile_path -AclObject $NewAcl
+				$acl = Get-Acl -Path $profile_path
+				$fileSystemAccessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($user.SamAccountName, 'FullControl', 'ContainerInherit, ObjectInherit', 'InheritOnly', 'Allow')
+				#$fileSystemAccessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($user.SamAccountName, 'FullControl', 'Allow')
+				$acl.SetAccessRule($fileSystemAccessRule)
+				Set-Acl -Path $profile_path -AclObject $acl
 
-			# Создаем DFS-ссылку на профиль пользователя
-			New-DfsnFolder -Path ("{0}\{1}" -f $company.dfs_link, $user.SamAccountName) -TargetPath $profile_path
+				# Создаем DFS-ссылку на профиль пользователя
+				Invoke-Command -ComputerName localhost -ArgumentList @($company.dfs_link, $user.SamAccountName, $profile_path) -Credential $global:ps_creds -Authentication Credssp -ScriptBlock {
+					param($dfs_link, $SamAccountName, $profile_path)
+					$ErrorActionPreference = 'Stop'
+					New-DfsnFolder -Path ("{0}\{1}" -f $dfs_link, $SamAccountName) -TargetPath $profile_path
+				}
+			}
+			else
+			{
+				$global:result = 1
+				$global:error_msg += ("Критичная ошибка создания папки профиля. Не обнаружен свободный ресурс для профиля;`r`n")
+			}
 		}
 		catch
 		{
@@ -423,7 +447,7 @@ function main()
 	{
 		try
 		{
-			$session = New-PSSession -ConnectionUri $global:g_config.sfb_conn_uri -Credential $global:creds
+			$session = New-PSSession -ConnectionUri $global:g_config.sfb_conn_uri -Credential $global:exch_creds
 			Import-PSSession $session
 
 			$fail = $global:retry_count

@@ -9,8 +9,6 @@ $ErrorActionPreference = 'Stop'
 
 . c:\orchestrator\settings\config.ps1
 
-$ErrorActionPreference = 'Stop'
-
 $global:result = 0
 $global:error_msg = ''
 
@@ -199,6 +197,19 @@ function DisableUser($user)
 				$global:error_msg += ("Ошибка получения статуса показа в адресной книге (" + $_.Exception.Message + ");`r`n")
 			}
 
+			# Включение автоответа
+
+			try
+			{
+				$text = $global:g_config.email_autoanswer_text.Replace('%UserName%', $user.DisplayName).Replace('%CompanyName%', $user.Company)
+				Set-MailboxAutoReplyConfiguration -Identity $user.SamAccountName -AutoReplyState Enabled -ExternalAudience All -InternalMessage $text -ExternalMessage $text
+			}
+			catch
+			{
+				$global:result = 1
+				$global:error_msg += ("Ошибка включения автоответа (" + $_.Exception.Message + ");`r`n")
+			}
+
 			# Скрытие из адресной книги
 
 			try
@@ -293,7 +304,7 @@ function DisableUser($user)
 	catch
 	{
 		$global:result = 1
-		$global:error_msg += "Ошибка подключения к серверу Lync: {0}`r`n" -f $_.Exception.Message 
+		$global:error_msg += "Ошибка подключения к серверу Exchange: {0}`r`n" -f $_.Exception.Message 
 	}
 
 	# Выключение Lync
@@ -435,9 +446,8 @@ function main()
 
 	$global:subject = ("User disabled: " + $user.SamAccountName + " (" + $user.DisplayName + ")")
 
-	$global:body = @'
-		<h1>Был заблокирован пользователь</h1>
-'@
+	$global:body = '<h1>Был заблокирован пользователь</h1>'
+	$global:body += '<p>'
 
 	# Отключение учётной записи
 
@@ -445,8 +455,8 @@ function main()
 
 	# Поиск и отключение административной учётной записи
 
-	$adm_name = ($user.Name + "ADM")
-	$users = 0
+	$adm_name = ('{0}ADM' -f $user.Name)
+	$users = $null
 	try
 	{
 		$users = Get-ADUser -Filter {CN -eq $adm_name} -Properties Company, memberof, displayName, msRTCSIP-UserEnabled
@@ -460,6 +470,8 @@ function main()
 	{
 		DisableUser -User $user
 	}
+
+	$global:body += '</p>'
 }
 
 main

@@ -1,31 +1,27 @@
 #  GPO add entries to Local Groups
 
-$global:login = ''
-$global:compname = ''
-$global:code = ''
-$global:comment = ''
-
-$global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+$rb_input = @{
+	login = ''
+	compname = ''
+	code = ''
+	comment = ''
+}
 
 $global:result = 0
 $global:error_msg = ''
-
-trap
-{
-	$global:result = 1
-	$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
-	return;
-}
 
 $ErrorActionPreference = 'Stop'
 
 $global:retry_count = 8
 
-. c:\orchestrator\settings\settings.ps1
+. c:\orchestrator\settings\config.ps1
 
-$global:smtp_to = @($global:admin_email, $global:helpdesk_email, $global:techsupport_email, $global:useraccess_email)
+$global:subject = ''
+$global:body = ''
+$global:smtp_to = @($global:g_config.admin_email, $global:g_config.helpdesk_email, $global:g_config.techsupport_email, $global:g_config.useraccess_email)
+$global:smtp_to = $global:smtp_to -join ','
 
-function main()
+function main($rb_input)
 {
 	trap
 	{
@@ -37,17 +33,17 @@ function main()
 	$add_to_admin = 0
 	$add_to_rdp = 0
 
-	if($global:code -eq 'adm')
+	if($rb_input.code -eq 'adm')
 	{
 		$groupsid = 'S-1-5-32-544'    # Administrators (built-in)
 		$add_to_admin = 1
 	}
-	elseif($global:code -eq 'rdp')
+	elseif($rb_input.code -eq 'rdp')
 	{
 		$groupsid = 'S-1-5-32-555'    # Remote Desktop Users (built-in)
 		$add_to_rdp = 1
 	}
-	elseif($global:code -eq 'all' -or $global:code -eq 'rms')
+	elseif($rb_input.code -eq 'all' -or $rb_input.code -eq 'rms')
 	{
 		$groupsid = $null
 		$add_to_admin = 1
@@ -71,7 +67,7 @@ function main()
 		return
 	}
 
-	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path, $domain.PDCEmulator)
+	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:g_config.gpo_local_groups_path, $domain.PDCEmulator)
 	
 	# Create policy backup
 	try
@@ -85,10 +81,12 @@ function main()
 		return
 	}
 
+	$global:subject = 'Предоставление локальные права на ПК: {0} - {1}' -f $rb_input.login, $rb_input.compname
+
 	$user = $null
 	try
 	{
-		$user = Get-ADUser -Identity $global:login -Properties 'msDS-PrincipalName'
+		$user = Get-ADUser -Identity $rb_input.login -Properties 'msDS-PrincipalName'
 	}
 	catch
 	{
@@ -107,7 +105,7 @@ function main()
 	$comp = $null
 	try
 	{
-		$comp = Get-ADComputer -Identity $global:compname
+		$comp = Get-ADComputer -Identity $rb_input.compname
 	}
 	catch
 	{
@@ -306,43 +304,22 @@ function main()
 	}
 
 
-	$body = @'
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<style type="text/css">
-		body {font-family: Arial; font-size: 12pt;}
-	</style>
-</head>
-<body>
-'@
-
-	$body += @'
-Предоставлены локальные права на ПК:<br />
-<br />
-Пользователь: <b>{0}</b><br />
-Компьютер: <b>{1}</b><br />
-Код операции: <b>{3}</b><br />
-Номер заявки: <b>{4}</b><br />
-<br />
-<br />
-<u>Техническая информация</u>:<br />{2}<br />
-'@ -f $global:login, $compname, $global:error_msg, $global:code, $global:comment
-
-	$body += @'
-</body>
-</html>
-'@
-
-	try
-	{
-		Send-MailMessage -from $global:smtp_from -to $global:smtp_to -Encoding UTF8 -subject "Предоставление локальные права на ПК" -bodyashtml -body $body -smtpServer $global:smtp_server -Credential $global:smtp_creds
-	}
-	catch
-	{
-		$global:result = 1
-		$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
-	}
+	# Формирование информационного сообщения
+	
+	$global:body += @'
+		<h1>Предоставлены локальные права на ПК:</h1>
+		<p>
+			Пользователь: <b>{0}</b><br />
+			Компьютер: <b>{1}</b><br />
+			Код операции: <b>{2}</b><br />
+			Номер заявки: <b>{3}</b>
+		</p>
+'@ -f $user.'msDS-PrincipalName', $rb_input.compname, $rb_input.code, $rb_input.comment
 }
 
-main
+main -rb_input $rb_input
+
+if($global:result -ne 0)
+{
+	$global:body += "<br /><br /><pre class=`"error`">Техническая информация:`r`n`r`n{0}</pre>" -f $global:error_msg
+}

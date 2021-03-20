@@ -5,9 +5,6 @@ $global:address = ''
 $global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 $global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
-$global:rules_out = @('Запрещено в интернет', 'Запрещено в интернет 2', 'Запрещено в интернет 3')
-$global:rules_in = @('Запрещено из интернета', 'Запрещено из интернета 2', 'Запрещено из интернета 3')
-
 $ErrorActionPreference = 'Stop'
 
 . c:\orchestrator\settings\config.ps1
@@ -42,7 +39,7 @@ function main()
 
 		$address_exist = 0
 
-		foreach($rule in $global:rules_out)
+		foreach($rule in $global:g_config.rules_out)
 		{
 			$list = (Get-TransportRule -Identity $rule).SentTo
 			if($list -contains $global:address)
@@ -56,7 +53,7 @@ function main()
 		if(!$address_exist)
 		{
 			$address_exist = 0
-			foreach($rule in $global:rules_out)
+			foreach($rule in $global:g_config.rules_out)
 			{
 				$list = (Get-TransportRule -Identity $rule).SentTo
 				$list += $global:address
@@ -89,7 +86,7 @@ function main()
 	
 		$address_exist = 0
 		
-		foreach($rule in $global:rules_in)
+		foreach($rule in $global:g_config.rules_in)
 		{
 			$list = (Get-TransportRule -Identity $rule).From
 			if($list -contains $global:address)
@@ -102,7 +99,7 @@ function main()
 
 		if(!$address_exist)
 		{
-			foreach($rule in $global:rules_in)
+			foreach($rule in $global:g_config.rules_in)
 			{
 				$list = (Get-TransportRule -Identity $rule).From
 				$list += $global:address

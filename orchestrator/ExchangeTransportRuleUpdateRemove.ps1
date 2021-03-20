@@ -5,21 +5,11 @@ $global:address = ''
 $global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 $global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
-$global:rules_out = @('Запрещено в интернет', 'Запрещено в интернет 2')
-$global:rules_in = @('Запрещено из интернета', 'Запрещено из интернета 2')
-
-trap
-{
-	$global:result = 1
-	$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
-	return;
-}
-
 $ErrorActionPreference = 'Stop'
 
-. c:\orchestrator\settings\settings.ps1
+. c:\orchestrator\settings\config.ps1
 
-$global:smtp_to = @($global:admin_email, $global:uib_email)
+$global:smtp_to = @($global:g_config.admin_email, $global:g_config.uib_email)
 
 $global:result = 0
 $global:error_msg = ''
@@ -44,12 +34,12 @@ function main()
 
 	try
 	{
-		$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:exch_conn_uri -Credential $global:exch_creds -Authentication Basic
+		$session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $global:g_config.exch_conn_uri -Credential $global:exch_creds -Authentication Basic
 		Import-PSSession $session
 
 		$address_exist = 0
 
-		foreach($rule in $global:rules_out)
+		foreach($rule in $global:g_config.rules_out)
 		{
 			$list = (Get-TransportRule -Identity $rule).SentTo
 			if($list -contains $global:address)
@@ -82,7 +72,7 @@ function main()
 			}
 		}
 
-		foreach($rule in $global:rules_in)
+		foreach($rule in $global:g_config.rules_in)
 		{
 			$list = (Get-TransportRule -Identity $rule).From
 			if($list -contains $global:address)
@@ -155,7 +145,7 @@ E-Mail адрес: <b>{1}</b><br />
 
 	try
 	{
-		Send-MailMessage -from $global:smtp_from -to $global:smtp_to -Encoding UTF8 -subject $subject -bodyashtml -body $global:body -smtpServer $global:smtp_server -Credential $global:smtp_creds
+		Send-MailMessage -from $global:g_config.smtp_from -to $global:smtp_to -Encoding UTF8 -subject $subject -bodyashtml -body $global:body -smtpServer $global:g_config.smtp_server -Credential $global:smtp_creds
 	}
 	catch
 	{

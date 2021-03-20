@@ -1,31 +1,30 @@
 #  GPO list entries from Local Groups
 
-$global:mail = ''
-
-$global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+$rb_input = @{
+	mail = ''
+}
 
 $global:result = 0
 $global:error_msg = ''
 
-trap
-{
-	$global:result = 1
-	$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
-	return;
-}
-
 $ErrorActionPreference = 'Stop'
 
-. c:\orchestrator\settings\settings.ps1
+$global:retry_count = 8
 
-$global:smtp_to = @($global:admin_email)
+. c:\orchestrator\settings\config.ps1
 
-if($global:mail)
+$global:subject = ''
+$global:body = ''
+$global:smtp_to = @($global:g_config.admin_email, $global:g_config.useraccess_email)
+
+if($rb_input.mail)
 {
-	$global:smtp_to += @($global:mail)
+	$global:smtp_to += @($rb_input.mail)
 }
 
-function main()
+$global:smtp_to = $global:smtp_to -join ','
+
+function main($rb_input)
 {
 	trap
 	{
@@ -45,7 +44,7 @@ function main()
 		return
 	}
 
-	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:gpo_local_groups_path, $domain.PDCEmulator)
+	$xml_file = ('\\{1}\{0}\Machine\Preferences\Groups\Groups.xml' -f $global:g_config.gpo_local_groups_path, $domain.PDCEmulator)
 
 	try
 	{
@@ -82,57 +81,28 @@ function main()
 		return
 	}
 
-	$body = @'
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<style>
-		body{font-family: Courier New; font-size: 8pt;}
-		h1{font-size: 16px;}
-		h2{font-size: 14px;}
-		h3{font-size: 12px;}
-		table{border: 1px solid black; border-collapse: collapse; font-size: 8pt;}
-		th{border: 1px solid black; background: #dddddd; padding: 5px; color: #000000;}
-		td{border: 1px solid black; padding: 5px; }
-		.pass {background: #7FFF00;}
-		.warn {background: #FFE600;}
-		.error {background: #FF0000; color: #ffffff;}
-	</style>
-</head>
-<body>
-'@
+	$global:subject = 'Список предоставленных локальных прав на ПК'
 
-	$body += '<h2>Список предоставленных локальных прав на ПК</h2>'
+	$global:body = '<h2>Список предоставленных локальных прав на ПК</h2>'
 
-	$body += '<table>'
-	$body +=  '<tr><th>Local group</th><th>Login</th><th>Computer</th></tr>'
+	$global:body += '<table>'
+	$global:body +=  '<tr><th>Local group</th><th>Login</th><th>Computer</th></tr>'
 	
 	$table = $table | Sort-Object GroupName, Members, Computers
 	
 	foreach($row in $table)
 	{
-		$body +=  '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $row.GroupName, $row.Members, $row.Computers
+		$global:body +=  '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $row.GroupName, $row.Members, $row.Computers
 	}
 	
-	$body += '</table>'
+	$global:body += '</table>'
 
-	$body += $global:error_msg
-
-	$body += @'
-<br /><small><a href="http://web.bristolcapital.ru/orchestrator/start-runbook.php?id=3db0cebd-3339-4aec-959c-0138a5ba7e0d&param[fe287297-b00d-4ece-94e4-eb9a56297cd2]={0}">Сформировать отчёт заново</a></small>
-</body>
-</html>
-'@ -f $global:mail
-
-	try
-	{
-		Send-MailMessage -from $global:smtp_from -to $global:smtp_to -Encoding UTF8 -subject "Список предоставленных локальных прав на ПК" -bodyashtml -body $body -smtpServer $global:smtp_server -Credential $global:smtp_creds
-	}
-	catch
-	{
-		$global:result = 1
-		$global:error_msg += ("Ошибка отправки письма (" + $_.Exception.Message + ");`r`n")
-	}
+	$global:body += '<br /><small><a href="{0}/orchestrator/start-runbook.php?id=3db0cebd-3339-4aec-959c-0138a5ba7e0d&param[fe287297-b00d-4ece-94e4-eb9a56297cd2]={1}">Сформировать отчёт заново</a></small>' -f $global:g_config.cdb_url, $rb_input.mail
 }
 
-main
+main -rb_input $rb_input
+
+if($global:result -ne 0)
+{
+	$global:body += "<br /><br /><pre class=`"error`">Техническая информация:`r`n`r`n{0}</pre>" -f $global:error_msg
+}

@@ -111,43 +111,38 @@ function main()
 					AND (POLICYINSTANCES.Status IS NULL)
 '@ -f $global:proc_id, $global:sco_server
 
+			$info = '<br />'
 			$res = Invoke-SQL -dataSource $global:g_config.scorch_db_server -sqlCommand $query -database $global:g_config.scorch_db_name
-			if($res.Rows.Count -gt 0)
+			foreach($row in $res.Rows)
 			{
 				try
 				{
-					$objSID = New-Object System.Security.Principal.SecurityIdentifier($res[0].CreatedBy)
+					$objSID = New-Object System.Security.Principal.SecurityIdentifier($row.CreatedBy)
 					$objUser = $objSID.Translate([System.Security.Principal.NTAccount])
 					$username = $objUser.Value
 
 					if($global:subject -eq '')
 					{
-						$global:subject = $res[0].Name
+						$global:subject = $row.Name
 					}
 				}
 				catch
 				{
-					$username = $res[0].CreatedBy
+					$username = $row.CreatedBy
 				}
 				
-				$info = @'
-<br />
-<br />
-<pre class="small">
-Название ранбка: {3}
+				$info += @'
+					<br />
+					<pre class="small">
+Название ранбука: {3}
 Кто запустил: {0}
 Process ID: {1}
 Job ID: {4}
 Running server: {2}
 </pre>
-'@ -f $username, $global:proc_id, $global:sco_server, $res[0].Name, $res[0].JobID
+'@ -f $username, $global:proc_id, $global:sco_server, $row.Name, $row.JobID
 				
 		
-			}
-			else
-			{
-				$global:result = 1
-				$global:error_msg += ("Cannot find process by ID;`r`n")
 			}
 		}
 		catch

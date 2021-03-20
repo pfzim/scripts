@@ -1,6 +1,7 @@
 # Delete all user data
 
 $global:exch_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
+$global:ps_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
 
 $global:result = 0
 $global:error_msg = ''
@@ -16,6 +17,20 @@ $global:body = ''
 
 $global:smtp_to = @($global:g_config.admin_email, $global:g_config.helpdesk_email)
 $global:smtp_to = $global:smtp_to -join ','
+
+function Rename-SubFolders($Path)
+{
+    $Path
+    $folders = Get-ChildItem -Path $Path -Directory
+    $i = 0
+    foreach($folder in $folders)
+    {
+        $i++
+        Rename-SubFolders -Path $folder.FullName
+        #"{0,-60} -> d{1}" -f $folder.Name, $i
+        Rename-Item -Path $folder.FullName -NewName ('d{0}' -f $i)
+    }
+}
 
 function main()
 {
@@ -58,6 +73,8 @@ function main()
 
 	foreach($user in $users)
 	{
+		$has_errors = $false
+		
 		if($user.Info -match 'EDD:\d\d-\d\d-\d\d\d\d')
 		{
 			$date_arr = $user.Info -split '[:-]'
@@ -65,55 +82,134 @@ function main()
 
 			if(!$user.Enabled -and ($edd -lt $border_date))
 			{
+				# Удаление DFS ссылок пользователя
+				
+				foreach($dfs_link in $global:g_config.user_dfs_links)
+				{
+					$location = ('{0}\{1}' -f $dfs_link, $user.SamAccountName)
+					if(Test-Path -Path $location)
+					{
+						try
+						{
+							Invoke-Command -ComputerName localhost -ArgumentList @($location) -Credential $global:ps_creds -Authentication Credssp -ScriptBlock {
+								param($dfs_link)
+								$ErrorActionPreference = 'Stop'
+								Remove-DfsnFolder -Path $dfs_link -Confirm:$false -Force 
+							}
+							$list_deleted_data += "Удалена DFS ссылка: {0}`r`n" -f $location
+						}
+						catch
+						{
+							$has_errors = $true
+							$global:result = 1
+							$global:error_msg += ("Ошибка удаления DFS ссылки {0} ({1});`r`n" -f $location, $_.Exception.Message)
+						}
+					}
+				}
+
+				# Удаление папок пользователя на общих ресурсах
+				
 				foreach($folder in $global:g_config.user_folders)
 				{
 					$location = ('{0}\{1}' -f $folder, $user.SamAccountName)
 					if(Test-Path -Path $location)
 					{
+						# Попытка удаления папки
+						$done = $false
 						try
 						{
 							Remove-Item -Path $location -Recurse -Force -Confirm:$false
 							$list_deleted_data += "Удалена папка: {0}`r`n" -f $location
+							$done = $true
+						}
+						catch
+						{
+							$done = $false
+						}
+						
+						# Если попытка удаления не удачна
+						if(!$done)
+						{
+							# Переименовываем папки в более короткие имена
+							try
+							{
+								Rename-SubFolders -Path $location
+							}
+							catch
+							{
+								$has_errors = $true
+								$global:result = 1
+								$global:error_msg += ("Ошибка переименования папок в более короткое имя {0} ({1});`r`n" -f $location, $_.Exception.Message)
+								continue
+							}
+							
+							# Повторяем попытку удаления
+							try
+							{
+								Remove-Item -Path $location -Recurse -Force -Confirm:$false
+								$list_deleted_data += "Удалена папка: {0}`r`n" -f $location
+							}
+							catch
+							{
+								$has_errors = $true
+								$global:result = 1
+								$global:error_msg += ("Ошибка удаления данных из {0} ({1});`r`n" -f $location, $_.Exception.Message)
+							}
+						}
+					}
+				}
+				
+				# Удаление ПЯ и УЗ
+
+				if(!$has_errors)
+				{
+					$mbx = $null
+					try
+					{
+						$mbx = Get-Mailbox -Identity $user.SamAccountName
+					}
+					catch
+					{
+						$mbx = $null
+					}
+					
+					if($mbx)
+					{
+						try
+						{
+							Remove-Mailbox -Identity $user.SamAccountName -Permanent $true -Force -Confirm:$false
+							$list_deleted_data += "Удалён почтовый ящик и учётная запись: {0}`r`n" -f $user.SamAccountName
 						}
 						catch
 						{
 							$global:result = 1
-							$global:error_msg += ("Ошибка удаления данных из {0} ({1});`r`n" -f $location, $_.Exception.Message)
+							$has_errors = $true
+							$global:error_msg += ("Ошибка удаления ПЯ и УЗ {0} ({1});`r`n" -f $user.SamAccountName, $_.Exception.Message)
+						}
+					}
+					else
+					{
+						try
+						{
+							Remove-ADObject -Identity $user -Recursive -Confirm:$false
+							$list_deleted_data += "Удалёна учётная запись: {0}`r`n" -f $user.SamAccountName
+						}
+						catch
+						{
+							$global:result = 1
+							$has_errors = $true
+							$global:error_msg += ("Ошибка удаления УЗ из AD {0} ({1});`r`n" -f $user.SamAccountName, $_.Exception.Message)
 						}
 					}
 				}
 
-				if($global:result -eq 0)
+				$color = ''
+				if($has_errors)
 				{
-					try
-					{
-						Remove-Mailbox -Identity $user.SamAccountName -Permanent $true -Force -Confirm:$false
-						$list_deleted_data += "Удалён почтовый ящик и учётная запись: {0}`r`n" -f $user.SamAccountName
-					}
-					catch
-					{
-						$global:result = 1
-						$global:error_msg += ("Ошибка удаления ПЯ и УЗ {0} ({1});`r`n" -f $user.SamAccountName, $_.Exception.Message)
-					}
-
-					<#
-					try
-					{
-						###xRemove-ADUser -Identity $user -Confirm:$false
-					}
-					catch
-					{
-						$global:result = 1
-						$global:error_msg += ("Ошибка удаления УЗ из AD {0} ({1});`r`n" -f $user.SamAccountName, $_.Exception.Message)
-					}
-					#>
-
-					$table += '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $user.SamAccountName, $user.Name, $user.Info
+					$color = ' class="error"'
 				}
-				else
-				{
-					$table += '<tr class="error"><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $user.SamAccountName, $user.Name, $user.Info
-				}
+
+				$table += '<tr{3}><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f $user.SamAccountName, $user.Name, $user.Info, $color
 				
 				#break # Test break
 			}
