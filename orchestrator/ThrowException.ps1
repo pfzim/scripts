@@ -1,7 +1,10 @@
-$result = ""
-$error_msg = ""
+[int] $errors = '0'
+[int] $warnings = '0'
+$message = @'
 
-if($result -ne 0)
+'@
+
+if(($errors + $warnings) -ne 0)
 {
-	throw New-Object System.Exception(("Error: " + $error_msg))
+	throw New-Object System.Exception('Message: {0}' -f $message)
 }

@@ -118,7 +118,7 @@ function main($rb_input)
 	}
 	catch
 	{
-		$result.errors++; messages += ('ERROR[{0},{1}]: {2}' -f $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine, $_.Exception.Message);
+		$result.errors++; $result.messages += ('ERROR[{0},{1}]: {2}' -f $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine, $_.Exception.Message);
 		return $result
 	}
 }
@@ -139,7 +139,7 @@ if($result.errors -eq 0)
 
 	# Объединяем результат с предыдущим ранбуком
 
-	$result.error += $output.error
+	$result.errors += $output.errors
 	$result.warnings += $output.warnings
 	$result.messages += $output.messages
 }
