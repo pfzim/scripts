@@ -1,14 +1,58 @@
 #!/bin/sh
-# script for remove old backup files v0.09.2   pfzim (c) 2010 (44f5709e242b975305161941b30d1573)
+# script for remove old backup files v0.09.3   pfzim (c) 2010 (44f5709e242b975305161941b30d1573)
 # save last ${storage_time} days old backups, all 1 and 15 day of month
 # backups other will be deleted
 
+storage_path=''
+storage_time=0
+no_permanent=no
 
-storage_path='.'
-storage_time=90
-expired_cmd='echo rm -rf'
-
+expired_cmd='rm -f'
 awkcmd='awk'
+
+
+while [ $# -gt 0 ]; do
+  key="$1"
+
+  case $key in
+    -p|--path)
+      storage_path="$2"
+      shift
+      shift
+      ;;
+    -d|--days)
+      storage_time="$2"
+      shift
+      shift
+      ;;
+    -n|--no-permanent)
+      no_permanent=yes
+      shift
+      ;;
+    -h|--help)
+      storage_time=0
+      break
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      exit 1
+    ;;
+  esac
+done
+
+
+echo 'Script for remove old backup files v0.09.3   pfzim (c) 2010'
+
+if [ -z "${storage_path}" -o -z "${storage_time}" -o "${storage_time}" -le 0 ] ; then
+  echo 'Usage: rotate.sh -p /var/backups -d 14'
+  echo 'Options:'
+  echo '  -p|--path          - path to stored backups'
+  echo '  -d|--days          - how long store backups'
+  echo '  -n|--no-permanent  - do not skip files for 1 and 15 days'
+  echo '  -h|--help          - this help'
+  exit 1
+fi
+
 
 curdate=`date '+%Y-%m-%d-%H-%M-%S'`
 #curdate=`mysql -h 127.0.0.1 -u LOGIN -pPASSWORD -s --skip-column-names -e "SELECT DATE_FORMAT(NOW(), '%Y-%m-%d-%H-%i-%S');"`
@@ -20,8 +64,10 @@ hour=`echo $curdate | ${awkcmd} -F- '{ print $4+0; }'`
 minute=`echo $curdate | ${awkcmd} -F- '{ print $5+0; }'`
 second=`echo $curdate | ${awkcmd} -F- '{ print $6+0; }'`
 
-echo 'Script for remove old backup files v0.09.2   pfzim (c) 2010'
-echo Today is $day.$month.$year
+echo "Today is ${day}.${month}.${year}"
+echo "Path: ${storage_path}"
+echo "Days: ${storage_time}"
+echo "No permanent: ${no_permanent}"
 
 #[ "backup" "<" "backup-2010-04-14-test.tar.gz" ] || ( echo TEST1 ERROR; exit )
 #[ "backup" "<" "db_dump.sql.gz" ] && ( echo TEST2 ERROR; exit )
@@ -31,6 +77,11 @@ for filename in ${storage_path}/backup-* ; do
 	#filename=`basename $filename`
 	filename=`echo $filename | ${awkcmd} -F/ '{ print $NF; }'`
 	echo -n "$filename"
+
+	if [ ! -f "${storage_path}/${filename}" ] ; then
+	    echo " : something gone wrong. file not exist"
+	    continue
+	fi
 
 #	if [ ! "backup" "<" "$filename" ] ; then
 #	    echo " invalid file name"
@@ -42,12 +93,12 @@ for filename in ${storage_path}/backup-* ; do
 	d=`echo $filename | ${awkcmd} -F- '{ print $4+0; }'`
 
 	if [ \( "$d" -lt 1 \) -o \( "$d" -gt 31 \) -o \( "$y" -lt 1 \) ] ; then
-	    echo " invalid date in file name"
+	    echo " : invalid date in file name"
 	    continue
 	fi
-	
-	if [ \( "$d" -eq 1 \) -o \( "$d" -eq 15 \) ] ; then
-	    echo " never deleted"
+
+	if [ \( "$no_permanent" != "yes" \) -a \( \( "$d" -eq 1 \) -o \( "$d" -eq 15 \) \) ] ; then
+	    echo " : never deleted"
 	    continue
 	fi
 
@@ -67,7 +118,7 @@ for filename in ${storage_path}/backup-* ; do
 					dpm=28
 				fi
 				;;
-			*) echo " invalid month value: $m"; continue 2 ;;
+			*) echo " : invalid month value: $m"; continue 2 ;;
 		esac
 
 		if [ $d -gt $dpm ]; then
@@ -98,9 +149,10 @@ for filename in ${storage_path}/backup-* ; do
 	fi
 
 	if [ $outdated -gt 0 ]; then
-		echo " expired $d.$m.$y"
+		echo " : deleted. expired at ${d}.${m}.${y}"
 		${expired_cmd} "${storage_path}/${filename}"
 	else
-		echo " until $d.$m.$y"
+		echo " : saved until ${d}.${m}.${y}"
 	fi
 done
+
