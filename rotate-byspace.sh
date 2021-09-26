@@ -4,13 +4,51 @@
 # File name template: backup-YYYY-MM-DD-HHMMSS-*
 
 
-storage_path='.'
-storage_minspace=30000000000
-expired_cmd='echo rm -f'
+storage_path=''
+storage_minspace=0
+expired_cmd='rm -f'
 
 awkcmd='awk'
 
-echo 'Script for remove old backup files if free space less v0.01   pfzim (c) 2010'
+while [ $# -gt 0 ]; do
+  key="$1"
+
+  case $key in
+    -p|--path)
+      storage_path="$2"
+      shift
+      shift
+      ;;
+    -s|--space)
+      ((storage_minspace=$2 * 1073741824))
+      shift
+      shift
+      ;;
+    -h|--help)
+      storage_minspace=0
+      break
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      exit 1
+    ;;
+  esac
+done
+
+
+echo 'Script for remove old backup files if free space less v0.02   pfzim (c) 2010'
+
+if [ -z "${storage_path}" -o -z "${storage_minspace}" -o "${storage_minspace}" -le 0 ] ; then
+  echo 'Usage: rotate.sh -p /var/backups -s 30'
+  echo 'Options:'
+  echo '  -p|--path          - path to stored backups'
+  echo '  -s|--space         - free space required (GB)'
+  echo '  -h|--help          - this help'
+  exit 1
+fi
+
+#echo "Path : ${storage_path}"
+#echo "Min space : ${storage_minspace}"
 
 for filename in `find ${storage_path} -type f -name 'backup-*' -print | sort`; do
 	free_space=`df --output=avail --block-size=1 ${storage_path} | tail --lines=1`
@@ -26,3 +64,6 @@ for filename in `find ${storage_path} -type f -name 'backup-*' -print | sort`; d
 
 	${expired_cmd} "${storage_path}/${filename}"
 done
+
+exit 0
+
