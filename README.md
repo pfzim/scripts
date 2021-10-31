@@ -16,6 +16,6 @@
 `NetBackup/` - scripts for generate different reports
 
 
-https://github.com/Disassembler0/Win10-Initial-Setup-Script/issues/250
-Receive updates for other Microsoft products (Windows 7)
-(New-Object -ComObject Microsoft.Update.ServiceManager).AddService2("7971f918-a847-4430-9279-4a52d1efe18d", 7, "")
+https://github.com/Disassembler0/Win10-Initial-Setup-Script/issues/250  
+Receive updates for other Microsoft products (Windows 7)  
+`(New-Object -ComObject Microsoft.Update.ServiceManager).AddService2("7971f918-a847-4430-9279-4a52d1efe18d", 7, "")`
