@@ -1,4 +1,18 @@
-# Runbook template
+<# Runbook template
+
+	На вход ранбук принимает параметры:
+
+		errors            - количество возникших ошибок (из результата запуска предыдущего ранбука)
+		warnings          - количество возникших предупреждений (из результата запуска предыдущего ранбука)
+		message           - текстовое описание ошибок и предупреждений (из результата запуска предыдущего ранбука)
+
+	На выходе ранбук возвращает следующие параметры:
+
+		errors   - количество возникших ошибок
+		warnings - количество возникших предупреждений
+		message  - текстовое описание ошибок и предупреждений
+
+#>
 
 . c:\scripts\settings\settings.ps1
 
@@ -17,6 +31,8 @@ $rb_input = @{
 	who_start_runbook = ''
 	smtp_server = $global:smtp_server
 	smtp_from = $global:smtp_from
+	
+	debug_pref = 'SilentlyContinue'  # Change to Continue for show debug messages
 }
 
 # Если ранбуки запускаются цепочкой, то результат выполнения предыдущего
@@ -30,10 +46,10 @@ $result = @{
 '@)
 }
 
-# Основной блок ранбука
-
-$DebugPreference = 'SilentlyContinue'  # Change to Continue for show debug messages
+$DebugPreference = $rb_input.debug_pref
 $ErrorActionPreference = 'Stop'
+
+# Основной блок ранбука
 
 function main($rb_input)
 {
@@ -65,6 +81,7 @@ function main($rb_input)
 			param(
 				$rb_input
 			)
+			$DebugPreference = $rb_input.debug_pref
 			$ErrorActionPreference = 'Stop'
 			try
 			{
@@ -106,6 +123,13 @@ if($result.errors -eq 0)
 	$result.errors += $output.errors
 	$result.warnings += $output.warnings
 	$result.messages += $output.messages
+
+	<# Return custom results
+	if($output.errors -eq 0)
+	{
+		$data = $output.data
+	}
+	#>
 }
 
 # Код выхода для обратной совместимости
