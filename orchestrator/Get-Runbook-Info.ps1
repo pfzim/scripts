@@ -1,4 +1,29 @@
-# Detemine runbook name and who start it
+<# Detemine runbook name and who start it
+	
+	Ранбук для определения имени пользователя запустившего ранбук и название
+	ранбука.
+	
+	По полученным входящим параметрам делается SQL запрос в базу данных
+	Оркестратора для определения пользователя, запустившего ранбук, и названия
+	ранбука.
+	
+	На вход ранбук принимает параметры:
+		proc_id           - идентификатор процесса
+		sco_server        - имя сервера на котором запущен ранбук
+		
+		scorch_db_server  - адрес сервера с БД Оркестратора
+		scorch_db_name    - имя БД Оркестратора
+		
+		errors            - количество возникших ошибок (из результата запуска предыдущего ранбука)
+		warnings          - количество возникших предупреждений (из результата запуска предыдущего ранбука)
+		message           - текстовое описание ошибок и предупреждений (из результата запуска предыдущего ранбука)
+		
+	На выходе ранбук возвращает следующие параметры:
+
+		errors   - количество возникших ошибок
+		warnings - количество возникших предупреждений
+		message  - текстовое описание ошибок и предупреждений
+#>
 
 . c:\scripts\settings\settings.ps1
 
@@ -11,6 +36,8 @@ $rb_input = @{
 	sco_server = ''
 	scorch_db_server = $global:g_config.scorch_db_server
 	scorch_db_name = $global:g_config.scorch_db_name
+	
+	debug_pref = 'SilentlyContinue'  # Change to Continue for show debug messages
 }
 
 # Если ранбуки запускаются цепочкой, то результат выполнения предыдущего
@@ -24,8 +51,139 @@ $result = @{
 
 # Основной блок ранбука
 
-$DebugPreference = 'SilentlyContinue'  # Change to Continue for show debug messages
+$DebugPreference = $rb_input.debug_pref
 $ErrorActionPreference = 'Stop'
+
+# Functions for work with SQL queries
+
+function mysql_escape
+{
+	param(
+		[string] $value
+	)
+
+	#$escapers = @("\", "`"", "`n", "`r", "`t", "`x08", "`x0c", "'", "`x1A", "`0");
+	#$replacements = @("\\", "\`"", "\n", "\r", "\t", "\f", "\b", "\'", "\Z", "\0");
+
+	return $value.Replace('\', '\\').Replace('"', '\"').Replace("`n", '\n').Replace("`r", '\r').Replace("'", "\'").Replace("`0", '\0').Replace("`t", '\t').Replace("`f", '\f').Replace("`b", '\b').Replace([string][char]([convert]::toint16('1A', 16)), '\Z')
+}
+
+function mssql_escape
+{
+	param(
+		[string] $value
+	)
+
+	return $value.Replace("'", "''")
+}
+
+<#
+ *  \brief Replace placeholders with numbered parameters (zero-based)
+ *  
+ *  \return Return replaced string
+ *  
+ *  \details {d0} - safe integer
+ *           {s0} - safe trimmed sql string
+ *           {f0} - safe float
+ *           {r0} - unsafe raw string
+ *           @    - DB_PREFIX
+ *           {{   - {
+ *           {@   - @
+ *           {#   - #
+ *           {!   - !
+ *           #    - safe integer (param by order)
+ *           !    - safe trimmed sql string (param by order)
+#>
+
+function rpv
+{
+	param(
+		[string] $string,
+		[array] $data
+	)
+
+	$out_string = ''
+	$len = $string.Length
+	$n = 0
+
+	$i = 0
+
+	while($i -lt $len)
+	{
+		if($string[$i] -eq '#')
+		{
+			$out_string += try { [int] $data[$param] } catch { 0 }
+			$n++
+		}
+		elseif($string[$i] -eq '!')
+		{
+			$out_string += "N'" + (mssql_escape -value $data[$n]) +"'"
+			$n++
+		}
+		elseif($string[$i] -eq '@')
+		{
+			$out_string += $global:DB_PREFIX
+			$n++
+		}
+		elseif($string[$i] -eq '{')
+		{
+			$i++
+			if($string[$i] -eq '{')
+			{
+				$out_string += '{'
+			}
+			elseif($string[$i] -eq '@')
+			{
+				$out_string += '@'
+			}
+			elseif($string[$i] -eq '#')
+			{
+				$out_string += '#'
+			}
+			elseif($string[$i] -eq '!')
+			{
+				$out_string += '!'
+			}
+			else
+			{
+				$prefix = $string[$i]
+				$param = ''
+				$i++
+				while($string[$i] -ne '}')
+				{
+					$param += $string[$i]
+					$i++
+				}
+
+				$param = try { [int] $param } catch { 0 }
+
+				switch($prefix)
+				{
+					'd' {
+							$out_string += try { [int] $data[$param] } catch { 0 }
+						}
+					's' {
+							$out_string += "N'" + (mssql_escape -value $data[$param]) + "'"
+						}
+					'f' {
+							$out_string += try { [double] $data[$param] } catch { 0 }
+						}
+					'r' {
+							$out_string += $data[$param]
+						}
+				}
+			}
+		}
+		else
+		{
+			$out_string += $string[$i]
+		}
+
+		$i++
+	}
+
+	return $out_string
+}
 
 # Функция выполнения SQL запроса
 
@@ -46,7 +204,7 @@ function Invoke-SQL
     $adapter.Fill($dataSet) | Out-Null
 
     $connection.Close()
-    return $dataSet.Tables
+    return $dataSet.Tables[0]
 }
 
 function main($rb_input)
@@ -80,38 +238,42 @@ function main($rb_input)
 		$result['runbook_name'] = '';
 		$result['who_start_runbook'] = '';
 
-		$query = @'
-					SELECT
+		$query = rpv -string @'
+					SELECT TOP 1
 						POLICYINSTANCES.JobID
 						,Jobs.CreatedBy
+						,Jobs.CreationTime
+						,POLICYINSTANCES.TimeStarted
 						,POLICIES.Name
 						,POLICYINSTANCES.Status
 					FROM POLICYINSTANCES
 					INNER JOIN ACTIONSERVERS ON POLICYINSTANCES.ActionServer = ACTIONSERVERS.UniqueID
-					INNER JOIN [Microsoft.SystemCenter.Orchestrator.Runtime].Jobs AS Jobs ON Jobs.Id = POLICYINSTANCES.JobID
+					INNER JOIN [Microsoft.SystemCenter.Orchestrator.Runtime.Internal].Jobs AS Jobs ON Jobs.Id = POLICYINSTANCES.JobID
 					INNER JOIN POLICIES ON Jobs.RunbookId = POLICIES.UniqueID
 					WHERE
-						(POLICYINSTANCES.ProcessID = '{0}')
-						AND (ACTIONSERVERS.Computer = '{1}')
+						(POLICYINSTANCES.ProcessID = {d0})
+						AND (ACTIONSERVERS.Computer = {s1})
 						AND (POLICYINSTANCES.Status IS NULL)
-'@ -f $rb_input.proc_id, $rb_input.sco_server
+					ORDER BY POLICYINSTANCES.TimeStarted DESC
+'@ -data @($rb_input.proc_id, $rb_input.sco_server)
 
 		$res = Invoke-SQL -dataSource $rb_input.scorch_db_server -sqlCommand $query -database $rb_input.scorch_db_name
-		foreach($row in $res.Rows)
+		foreach($row in $res)
 		{
+			$result.runbook_name = $row.Name
+
 			try
 			{
 				$objSID = New-Object System.Security.Principal.SecurityIdentifier($row.CreatedBy)
 				$objUser = $objSID.Translate([System.Security.Principal.NTAccount])
 				$result.who_start_runbook = $objUser.Value
-
-				$result.runbook_name = $row.Name
-				break
 			}
 			catch
 			{
 				$result.who_start_runbook = $row.CreatedBy
 			}
+			
+			break
 		}
 
 		return $result
@@ -159,3 +321,4 @@ $warnings = $result.warnings
 $message = $result.messages -join "`r`n"
 
 Write-Debug ('Errors: {0}, Warnings: {1}, Messages: {2}' -f $errors, $warnings, $message)
+Write-Debug ('Name: {0}, Who run: {0}' -f $runbook_name, $who_start_runbook)
