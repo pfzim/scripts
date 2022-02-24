@@ -1,175 +1,218 @@
-# Send mail runbook
+<# Send mail
 
-$global:smtp_to = ''
-$global:subject = ''
-$global:body = @'
+	Ранбук для отправки результирующих почтовых сообщений
+
+	Письмо формируется из входящих параметров subject, body, attachments.
+	
+	Если параметры who_start_runbook или runbook_name не пустые, то добавляется
+	блок с информацией о том, кто запустил ранбук и его название.
+	
+	Если количество ошибок или предупреждений больше нуля, то добавляется
+	блок с информацией о возникших ошибках и предупреждениях.
+
+	На вход ранбук принимает параметры:
+		subject           - тема сообщения
+		body              - тело сообщения
+		attachments       - список файлов разделенный запятыми, которые требуется приложить к письму
+		mail_to           - адрес получателя
+		mail_to_bcc       - адрес получателя скрытой копии
+		who_start_runbook - кто запустил ранбук (из результата запуска ранбука Get-Runbook-Info.ps1)
+		runbook_name      - название ранбука  (из результата запуска ранбука Get-Runbook-Info.ps1)
+		remove_attachments_after_send - если параметр равен 'yes', то файлы перечисленные в attachments
+		                    будут удалены после отправки
+
+		errors            - количество возникших ошибок (из результата запуска предыдущего ранбука)
+		warnings          - количество возникших предупреждений (из результата запуска предыдущего ранбука)
+		message           - текстовое описание ошибок и предупреждений (из результата запуска предыдущего ранбука)
+		
+	На выходе ранбук возвращает следующие параметры:
+
+		errors   - количество возникших ошибок
+		warnings - количество возникших предупреждений
+		message  - текстовое описание ошибок и предупреждений
+
+#>
+
+. c:\scripts\settings\settings.ps1
+
+# Все входящие параметры указываем в $rb_input,
+# чтобы в основном блоке не было никаких внешних переменных.
+# Тем самым ранбук становится системонезависимым, универсальным и переносимым.
+
+$rb_input = @{
+	subject = ''
+	body = @'
 
 '@
-$global:proc_id = ''
-$global:sco_server = ''
+	attachments = ''
+	remove_attachments_after_send = ''
+	mail_to = ''
+	mail_to_bcc = $global:admin_email
 
-$global:smtp_creds = New-Object System.Management.Automation.PSCredential ('', (ConvertTo-SecureString '' -AsPlainText -Force))
-
-$ErrorActionPreference = 'Stop'
-
-. c:\orchestrator\settings\config.ps1
-
-$global:result = 0
-$global:error_msg = ''
-
-function Invoke-SQL
-{
-    param(
-        [string] $dataSource =  $(throw "Please specify a server."),
-        [string] $sqlCommand = $(throw "Please specify a query."),
-        [string] $database = $(throw "Please specify a DB.")
-      )
-
-    $connectionString = "Data Source=$dataSource; " +
-            "Integrated Security=SSPI;"             +
-            "Initial Catalog=$database"
-
-    $connection = new-object system.data.SqlClient.SQLConnection($connectionString)
-    $command = new-object system.data.sqlclient.sqlcommand($sqlCommand,$connection)
-    $connection.Open()
-
-    $adapter = New-Object System.Data.sqlclient.sqlDataAdapter $command
-    $dataset = New-Object System.Data.DataSet
-    $adapter.Fill($dataSet) | Out-Null
-
-    $connection.Close()
-    return $dataSet.Tables
+	who_start_runbook = ''
+	runbook_name = ''
+	smtp_server = $global:smtp_server
+	smtp_from = $global:smtp_from
 }
 
-function main()
+# Если ранбуки запускаются цепочкой, то результат выполнения предыдущего
+# ранбука указываем здесь
+
+$result = @{
+	errors = [int] 0
+	warnings = [int] 0
+	messages = @(@'
+
+'@)
+}
+
+# Основной блок ранбука
+
+$DebugPreference = 'SilentlyContinue'  # Change to Continue for show debug messages
+$ErrorActionPreference = 'Stop'
+
+function main($rb_input, $prev_result)
 {
 	trap
 	{
-		$global:result = 1
-		$global:error_msg += ("Критичная ошибка: {0}`r`n`r`nПроцесс прерван!`r`n" -f $_.Exception.Message);
-		return;
+		return @{ errors = 0; warnings = 0; messages = @("Critical error[{0},{1}]: {2}`r`n`r`nProcess interrupted!`r`n" -f $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine, $_.Exception.Message); }
 	}
-
-	# Проверка корректности заполнения полей
-
-	if($global:smtp_to -eq '')
-	{
-		$global:smtp_to = @()
-	}
-	else
-	{
-		$global:smtp_to = $global:smtp_to -Split ','
-	}
-	
-	$global:smtp_to += @($global:g_config.useraccess_email, $global:g_config.admin_email)
-
-	$header = @'
-		<html>
-		<head>
-			<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-			<style type="text/css">
-				body {font-family: Courier New; font-size: 8pt;}
-				p {font-family: Arial; font-size: 12pt;}
-				h1 {font-family: Arial; font-size: 16px;}
-				h2 {font-family: Arial; font-size: 14px;}
-				h3 {font-family: Arial; font-size: 12px;}
-				table {border: 1px solid black; border-collapse: collapse; font-size: 8pt;}
-				th {border: 1px solid black; background: #dddddd; padding: 5px; color: #000000;}
-				td {border: 1px solid black; padding: 5px; }
-				.red {color: red;}
-				.pass {color: green;}
-				.warn {color: #ff6600;}
-				.error {background: #FF0000; color: #ffffff;}
-                .small {font-size: 8pt;}
-			</style>
-		</head>
-		<body>
-'@
-	$footer = '</body></html>';
-
-	# Определение названия ранбука и запустившего ранбук
-
-	$info = ''
-
-	if($global:proc_id -ne '' -and $global:sco_server -ne '')
-	{
-		try
-		{
-			$query = @'
-				SELECT
-					POLICYINSTANCES.JobID
-					,Jobs.CreatedBy
-					,POLICIES.Name
-					,POLICYINSTANCES.Status
-				FROM POLICYINSTANCES
-				INNER JOIN ACTIONSERVERS ON POLICYINSTANCES.ActionServer = ACTIONSERVERS.UniqueID
-				INNER JOIN [Microsoft.SystemCenter.Orchestrator.Runtime].Jobs AS Jobs ON Jobs.Id = POLICYINSTANCES.JobID
-				INNER JOIN POLICIES ON Jobs.RunbookId = POLICIES.UniqueID
-				WHERE
-					(POLICYINSTANCES.ProcessID = '{0}')
-					AND (ACTIONSERVERS.Computer = '{1}')
-					AND (POLICYINSTANCES.Status IS NULL)
-'@ -f $global:proc_id, $global:sco_server
-
-			$info = '<br />'
-			$res = Invoke-SQL -dataSource $global:g_config.scorch_db_server -sqlCommand $query -database $global:g_config.scorch_db_name
-			foreach($row in $res.Rows)
-			{
-				try
-				{
-					$objSID = New-Object System.Security.Principal.SecurityIdentifier($row.CreatedBy)
-					$objUser = $objSID.Translate([System.Security.Principal.NTAccount])
-					$username = $objUser.Value
-
-					if($global:subject -eq '')
-					{
-						$global:subject = $row.Name
-					}
-				}
-				catch
-				{
-					$username = $row.CreatedBy
-				}
-				
-				$info += @'
-					<br />
-					<pre class="small">
-Название ранбука: {3}
-Кто запустил: {0}
-Process ID: {1}
-Job ID: {4}
-Running server: {2}
-</pre>
-'@ -f $username, $global:proc_id, $global:sco_server, $row.Name, $row.JobID
-				
-		
-			}
-		}
-		catch
-		{
-			$global:result = 1
-			$global:error_msg += ("Ошибка получения запускателя ранбука ({0});`r`n" -f $_.Exception.Message)
-		}
-	}
-
-	# Отправка информационного письма
-
-	if($global:subject -eq '')
-	{
-		$global:subject = 'Undefined subject value'
-	}
-
-	$global:body = ($header + $global:body + $info + $footer)
 
 	try
 	{
-		Send-MailMessage -from $global:g_config.smtp_from -to $global:smtp_to -Encoding UTF8 -subject $global:subject -bodyashtml -body $global:body -smtpServer $global:g_config.smtp_server -Credential $global:smtp_creds
+		$result = @{ errors = 0; warnings = 0; messages = @() }
+
+		# Проверка корректности заполнения полей
+
+		if([string]::IsNullOrWhiteSpace($rb_input.subject))
+		{
+			$result.errors++; $result.messages += 'Ошибка: Не заполнено поле subject';
+		}
+
+		if([string]::IsNullOrWhiteSpace($rb_input.body))
+		{
+			$result.errors++; $result.messages += 'Ошибка: Не заполнено поле body';
+		}
+
+		if([string]::IsNullOrWhiteSpace($rb_input.mail_to) -and [string]::IsNullOrWhiteSpace($rb_input.mail_to_bcc))
+		{
+			$result.errors++; $result.messages += 'Ошибка: Не заполнено поле mail_to';
+		}
+
+		if($result.errors -gt 0)
+		{
+			return $result
+		}
+
+		$body = @'
+			<html>
+			<head>
+				<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+				<style type="text/css">
+					body {font-family: Arial; font-size: 11pt;}
+					h1 {font-size: 16px;}
+					h2 {font-size: 14px;}
+					h3 {font-size: 12px;}
+					table {border: 1px solid black; border-collapse: collapse; font-size: 8pt; font-family: Courier New;}
+					th {border: 1px solid black; background: #dddddd; padding: 5px; color: #000000;}
+					td {border: 1px solid black; padding: 5px; }
+					.pass {background: #7FFF00;}
+					.warn {background: #FFE600;}
+					.error {background: #FF0000; color: #ffffff;}
+				</style>
+			</head>
+			<body>
+'@
+
+		$body += $rb_input.body
+
+		if($prev_result.errors -gt 0 -or $prev_result.warnings -gt 0 -or -not [string]::IsNullOrWhiteSpace($prev_result.messages))
+		{
+			$body += '<br /><br /><br />Техническая информация:<br />Ошибок: {0}, Предупреждений: {1}<br />Сообщения:<br /><pre>{2}</pre>' -f $prev_result.errors, $prev_result.warnings, ($prev_result.messages -join "`r`n")
+		}
+
+		if(-not ([string]::IsNullOrWhiteSpace($rb_input.runbook_name) -and [string]::IsNullOrWhiteSpace($rb_input.who_start_runbook)))
+		{
+			$body += "<br /><br /><br /><pre>Ранбук: {0}`r`nИсполнитель: {1}</pre>" -f $rb_input.runbook_name, $rb_input.who_start_runbook
+		}
+
+		$body += '</body></html>'
+
+		$additional_params = @{}
+
+		if(-not [string]::IsNullOrWhiteSpace($rb_input.mail_to))
+		{
+			$additional_params['To'] = $rb_input.mail_to -split '[,;]' | %{ $_.Trim() }
+			if(-not [string]::IsNullOrWhiteSpace($rb_input.mail_to_bcc))
+			{
+				$additional_params['Bcc'] = $rb_input.mail_to_bcc -split '[,;]' | %{ $_.Trim() }
+			}
+		}
+		else
+		{
+			$additional_params['To'] = $rb_input.mail_to_bcc -split '[,;]' | %{ $_.Trim() }
+		}
+		
+		if(-not [string]::IsNullOrWhiteSpace($rb_input.attachments))
+		{
+			$additional_params['Attachments'] = $rb_input.attachments -split '[,;]' | %{ $_.Trim() }
+		}
+
+		Send-MailMessage -From $rb_input.smtp_from -Encoding UTF8 -Subject $rb_input.subject -bodyashtml -body $body -smtpServer $rb_input.smtp_server @additional_params
+
+		if(-not [string]::IsNullOrWhiteSpace($rb_input.attachments) -and ($additional_params['Attachments'].Count -gt 0) -and -not [string]::IsNullOrWhiteSpace($rb_input.remove_attachments_after_send) -and ($rb_input.remove_attachments_after_send -eq 'yes'))
+		{
+			foreach($attachment in $additional_params['Attachments'])
+			{
+				try
+				{
+					if(-not (Test-Path -Path $attachment))
+					{
+						$result.warnings++; $result.messages += ('Send-Mail: Ошибка: Файл не существует {0}' -f $attachment);
+						continue
+					}
+
+					Remove-Item -Path $attachment -Force -Confirm:$false
+				}
+				catch
+				{
+					$result.warnings++; $result.messages += ('Send-Mail: Ошибка удаления файла {3} [{0},{1}]: {2}' -f $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine, $_.Exception.Message, $attachment);
+				}
+			}
+		}
+
+		return $result
 	}
 	catch
 	{
-		$global:result = 1
-		$global:error_msg += ("Ошибка отправки информационного письма ({0});`r`n" -f $_.Exception.Message)
+		$result.errors++; $result.messages += ('Send-Mail: ERROR[{0},{1}]: {2}' -f $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine, $_.Exception.Message);
+		return $result
 	}
 }
 
-main
+
+# Выполняем ранбук
+
+$output = main -rb_input $rb_input -prev_result $result
+
+# Объединяем результат с предыдущим ранбуком
+
+$result.errors += $output.errors
+$result.warnings += $output.warnings
+$result.messages += $output.messages
+
+# Код выхода для обратной совместимости
+
+$exit_code = 0
+if($result.errors -gt 0 -or $result.warnings -gt 0)
+{
+	$exit_code = 1
+}
+
+# Возврат значений
+
+$errors = $result.errors
+$warnings = $result.warnings
+$message = $result.messages -join "`r`n"
+
+Write-Debug ('Errors: {0}, Warnings: {1}, Messages: {2}' -f $errors, $warnings, $message)
