@@ -17,6 +17,7 @@
 		mail_to           - адрес получателя
 		mail_to_bcc       - адрес получателя скрытой копии
 		who_start_runbook - кто запустил ранбук (из результата запуска ранбука Get-Runbook-Info.ps1)
+		who_websco        - кто запустил WebSCO (из параметра переданного ключём /w)
 		runbook_name      - название ранбука  (из результата запуска ранбука Get-Runbook-Info.ps1)
 		remove_attachments_after_send - если параметр равен 'yes', то файлы перечисленные в attachments
 		                    будут удалены после отправки
@@ -33,7 +34,7 @@
 
 #>
 
-. c:\scripts\settings\settings.ps1
+. c:\orchestrator\settings\config.ps1
 
 # Все входящие параметры указываем в $rb_input,
 # чтобы в основном блоке не было никаких внешних переменных.
@@ -47,12 +48,13 @@ $rb_input = @{
 	attachments = ''
 	remove_attachments_after_send = ''
 	mail_to = ''
-	mail_to_bcc = $global:admin_email
+	mail_to_bcc = $global:g_config.admin_email
 
 	who_start_runbook = ''
+	who_websco = ''
 	runbook_name = ''
-	smtp_server = $global:smtp_server
-	smtp_from = $global:smtp_from
+	smtp_server = $global:g_config.smtp_server
+	smtp_from = $global:g_config.smtp_from
 }
 
 # Если ранбуки запускаются цепочкой, то результат выполнения предыдущего
@@ -131,9 +133,9 @@ function main($rb_input, $prev_result)
 			$body += '<br /><br /><br />Техническая информация:<br />Ошибок: {0}, Предупреждений: {1}<br />Сообщения:<br /><pre>{2}</pre>' -f $prev_result.errors, $prev_result.warnings, ($prev_result.messages -join "`r`n")
 		}
 
-		if(-not ([string]::IsNullOrWhiteSpace($rb_input.runbook_name) -and [string]::IsNullOrWhiteSpace($rb_input.who_start_runbook)))
+		if(-not ([string]::IsNullOrWhiteSpace($rb_input.runbook_name) -and [string]::IsNullOrWhiteSpace($rb_input.who_start_runbook) -and [string]::IsNullOrWhiteSpace($rb_input.who_websco)))
 		{
-			$body += "<br /><br /><br /><pre>Ранбук: {0}`r`nИсполнитель: {1}</pre>" -f $rb_input.runbook_name, $rb_input.who_start_runbook
+			$body += "<br /><br /><br /><pre>Ранбук: {0}`r`nИсполнитель: {1}`r`nИсполнитель из WebSCO: {2}</pre>" -f $rb_input.runbook_name, $rb_input.who_start_runbook, $rb_input.who_websco
 		}
 
 		$body += '</body></html>'
