@@ -43,9 +43,7 @@ Receive updates for other Microsoft products (Windows 7)
 
 # [rotate.sh](rotate.sh)
 
-## Backup Rotation Script (EN)
-
----
+## (EN) Backup Rotation Script
 
 ### Purpose:
 This script is designed to automatically delete old backup files based on specified parameters. It analyzes backup file names, extracts dates from them, and deletes files that have exceeded the specified retention period.
@@ -137,13 +135,6 @@ backup-2023-09-20.tar.gz : deleted. expired at 4.10.2023
 
 ---
 
-### Possible Improvements:
-1. Add support for recursive file search.
-2. Add the ability to specify filename patterns.
-3. Implement logging to a file for further analysis.
-
----
-
 ### Key Points:
 - The script is easy to use and configure.
 - Suitable for automating backup cleanup on servers.
@@ -151,10 +142,9 @@ backup-2023-09-20.tar.gz : deleted. expired at 4.10.2023
 
 This script is a reliable tool for managing backup files and maintaining order on servers.
 
-
-## Скрипт для удаления старых резервных копий (Backup Rotation Script) (RU)
-
 ---
+
+## (RU) Скрипт для удаления старых резервных копий (Backup Rotation Script)
 
 ### Назначение:
 Этот скрипт предназначен для автоматического удаления старых резервных копий на основе заданных параметров. Он анализирует имена файлов резервных копий, извлекает дату из их имен и удаляет файлы, которые превысили указанный срок хранения.
@@ -243,13 +233,6 @@ backup-2023-09-20.tar.gz : deleted. expired at 4.10.2023
 ### Ограничения:
 - Скрипт предполагает, что имена файлов резервных копий строго соответствуют шаблону `backup-YYYY-MM-DD.*`.
 - Не поддерживает рекурсивный поиск файлов в поддиректориях.
-
----
-
-### Возможные улучшения:
-1. Добавить поддержку рекурсивного поиска файлов.
-2. Добавить возможность указания маски для имен файлов.
-3. Реализовать логирование в файл для последующего анализа.
 
 ---
 
